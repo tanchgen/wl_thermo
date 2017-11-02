@@ -89,6 +89,43 @@
                                                                  0 bit  for subpriority */
 #endif
 
+#define FLASH_PEKEY1 0x89ABCDEF
+#define FLASH_PEKEY2 0x02030405
+
+
+#define EEMEM __attribute__((section(".eeprom")))
+
+enum {
+  FALSE,
+  TRUE
+};
+
+enum{
+  RESET,
+  SET
+};
+
+// Структура сохраняемых в EEPROM параметров
+typedef struct {
+  uint8_t adcCal;       // Цалибровочный фактор для АЦП
+} tEeBackup;
+
+// Структура измеряемых датчиком параметров
+typedef struct{
+  uint8_t rssi;     // Мощность принимаемого радиосигнала
+  uint8_t temp;     // Измеряемая температура
+  uint8_t bat;      // Напряжение питания
+} tSensData;
+
+typedef struct{
+  unsigned int batCplt : 1;
+  unsigned int thermCplt : 1;
+} tFlags;
+
+extern tFlags flags;
+extern tEeBackup eeBackup;
+extern tSensData sensData;
+
 /* ########################## Assert Selection ############################## */
 /**
   * @brief Uncomment the line below to expanse the "assert_param" macro in the 

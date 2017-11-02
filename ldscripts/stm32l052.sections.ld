@@ -53,6 +53,19 @@ ENTRY(_start)
 
 SECTIONS
 {
+	/*
+	 * Section .eeprom in EEPROM-memory for STM32L0xx
+	 */
+
+    .eeprom :
+    {
+        . = ALIGN(4);
+        *(.eeprom)
+        . = ALIGN(4);
+
+    } >EEPROM
+
+
     /*
      * For Cortex-M devices, the beginning of the startup code is stored in
      * the .isr_vector section, which goes to FLASH. 
