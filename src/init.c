@@ -1,20 +1,18 @@
 /*
  * init.c
  *
- *  Created on: 30 окт. 2017 г.
+ *  Created on: 30 РѕРєС‚. 2017 Рі.
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
+#include <init.h>
 #include "stm32l0xx.h"
+#include "stm32l0xx_ll_adc.h"
 
-#include "init.h"
+#include "main.h"
 
 
 
-/* ADC init function */
-void adcInit(void){
-
-  ADC_ChannelConfTypeDef sConfig;
 
     /**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
     */

@@ -35,33 +35,10 @@
 
 #include "main.h"
 
-// ----------------------------------------------------------------------------
-//
-// Standalone STM32F0 led blink sample (trace via DEBUG).
-//
-// In debug configurations, demonstrate how to print a greeting message
-// on the trace device. In release configurations the message is
-// simply discarded.
-//
-// Then demonstrates how to blink a led with 1 Hz, using a
-// continuous loop and SysTick delays.
-//
-// Trace support is enabled by adding the TRACE macro definition.
-// By default the trace messages are forwarded to the DEBUG output,
-// but can be rerouted to any device or completely suppressed, by
-// changing the definitions required in system/src/diag/trace_impl.c
-// (currently OS_USE_TRACE_ITM, OS_USE_TRACE_SEMIHOSTING_DEBUG/_STDOUT).
-//
-// The external clock frequency is specified as a preprocessor definition
-// passed to the compiler via a command line option (see the 'C/C++ General' ->
-// 'Paths and Symbols' -> the 'Symbols' tab, if you want to change it).
-// The value selected during project creation was HSE_VALUE=8000000.
-//
-// Note: The default clock settings take the user defined HSE_VALUE and try
-// to reach the maximum possible system clock. For the default 8 MHz input
-// the result is guaranteed, but for other values it might not be possible,
-// so please adjust the PLL settings in system/src/cmsis/system_stm32f0xx.c
-//
+EEMEM tEeBackup eeBackup;     // Структура сохраняемых в EEPROM параметров
+tSensData sensData;           // Структура измеряемых датчиком параметров
+tFlags flags;                 // Флаги состояний системы
+
 
 /* Private function prototypes -----------------------------------------------*/
 static void MX_GPIO_Init(void);
@@ -96,6 +73,8 @@ int main(int argc, char* argv[])
 
   sysClockInit();
   pwrInit();
+  // Разлочили EEPROM
+  eepromUnlock();
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -139,8 +118,21 @@ static inline void pwrInit( void ){
   RCC->CFGR &= RCC_CFGR_STOPWUCK;
   // Stop mode enable, Interrupt-Wakeup, SleepOnExit enable
   SCB->SCR = (SCB->SCR & ~SCB_SCR_SEVONPEND_Msk) | SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk;
+
+  // Выключаем VREFIN при остановке
+  PWR->CR |= PWR_CR_ULP;
+  // Быстрое просыпание: не ждем, пока восстановится VREFIN, проверяем только при запуске АЦП
+  PWR->CR |= PWR_CR_FWU;
 }
 
+static inline void eepromUnlock( void ){
+  while ((FLASH->SR & FLASH_SR_BSY) != 0)
+  {}
+  if ((FLASH->PECR & FLASH_PECR_PELOCK) != 0){
+    FLASH->PEKEYR = FLASH_PEKEY1;
+    FLASH->PEKEYR = FLASH_PEKEY2;
+  }
+}
 
 
 #pragma GCC diagnostic pop

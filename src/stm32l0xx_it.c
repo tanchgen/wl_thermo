@@ -34,9 +34,9 @@
 #include "stm32l0xx.h"
 #include "stm32l0xx_it.h"
 
-/* USER CODE BEGIN 0 */
 
-/* USER CODE END 0 */
+#include "main.h"
+
 
 /* External variables --------------------------------------------------------*/
 
@@ -120,18 +120,33 @@ void SysTick_Handler(void)
 /* please refer to the startup file (startup_stm32l0xx.s).                    */
 /******************************************************************************/
 
+void ADC1_COMP_IRQHandler(void){
+  if( (ADC1->ISR & ADC_ISR_EOC) == 0 ){
+    // Неизвестное прерывание - перезапускаем АЦП
+    if ((ADC1->CR & ADC_CR_ADSTART) != 0){
+      ADC1->CR |= ADC_CR_ADSTP;
+    }
+    while ((ADC1->CR & ADC_CR_ADSTP) != 0)
+    {}
+    ADC1->CR |= ADC_CR_ADDIS;
+    while ((ADC1->CR & ADC_CR_ADEN) != 0)
+    {}
+    ADC1->CR |= ADC_CR_ADEN;
+  }
+  else {
+    sensData.bat = ADC1->DR;
+    flags.batCplt = TRUE;
+    // Не пара ли передавать данные серверу?
+    dataSendTry();
+  }
+}
+
+
 /**
 * @brief This function handles RTC global interrupt through EXTI lines 17, 19 and 20 and LSE CSS interrupt through EXTI line 19.
 */
-void RTC_IRQHandler(void)
-{
-  /* USER CODE BEGIN RTC_IRQn 0 */
-
-  /* USER CODE END RTC_IRQn 0 */
-  
-  /* USER CODE BEGIN RTC_IRQn 1 */
-
-  /* USER CODE END RTC_IRQn 1 */
+void RTC_IRQHandler(void){
+  // TODO: Обработка прерывания от часов
 }
 
 /**
@@ -139,13 +154,7 @@ void RTC_IRQHandler(void)
 */
 void EXTI0_1_IRQHandler(void)
 {
-  /* USER CODE BEGIN EXTI0_1_IRQn 0 */
-
-  /* USER CODE END EXTI0_1_IRQn 0 */
-  
-  /* USER CODE BEGIN EXTI0_1_IRQn 1 */
-
-  /* USER CODE END EXTI0_1_IRQn 1 */
+  // TODO: Обработка прерывания от RFM-69: Dio0
 }
 
 /**
@@ -153,13 +162,7 @@ void EXTI0_1_IRQHandler(void)
 */
 void I2C1_IRQHandler(void)
 {
-  /* USER CODE BEGIN I2C1_IRQn 0 */
-
-  /* USER CODE END I2C1_IRQn 0 */
-  
-  /* USER CODE BEGIN I2C1_IRQn 1 */
-
-  /* USER CODE END I2C1_IRQn 1 */
+  // TODO: Обработка прерывания I2C: работа с термодатчиком
 }
 
 /* USER CODE BEGIN 1 */
