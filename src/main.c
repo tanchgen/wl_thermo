@@ -35,18 +35,20 @@
 
 #include "main.h"
 
+volatile uint32_t mTick;
+
 EEMEM tEeBackup eeBackup;     // Структура сохраняемых в EEPROM параметров
-tSensData sensData;           // Структура измеряемых датчиком параметров
-tFlags flags;                 // Флаги состояний системы
+
+volatile tSensData sensData;           // Структура измеряемых датчиком параметров
+volatile eState state;                 // Состояние машины
+volatile tFlags flags;                 // Флаги состояний системы
 
 
 /* Private function prototypes -----------------------------------------------*/
-static void MX_GPIO_Init(void);
-static void MX_RTC_Init(void);
-static void MX_SPI1_Init(void);
-static void MX_ADC_Init(void);
-static void MX_I2C1_Init(void);
-
+static inline void mainInit( void );
+static inline void sysClockInit(void);
+static inline void pwrInit( void );
+static inline void eepromUnlock( void );
 
 // ----- main() ---------------------------------------------------------------
 
@@ -58,10 +60,6 @@ static void MX_I2C1_Init(void);
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
 
-static inline void mainInit( void );
-static inline void sysClockInit(void);
-static inline void pwrInit( void );
-
 int main(int argc, char* argv[])
 {
   // Send a greeting to the trace device (skipped on Release).
@@ -71,14 +69,16 @@ int main(int argc, char* argv[])
   // at high speed.
   trace_printf("System clock: %u Hz\n", SystemCoreClock);
 
+  mainInit();
   sysClockInit();
   pwrInit();
   // Разлочили EEPROM
   eepromUnlock();
 
   /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_RTC_Init();
+  adcInit();
+  i2cInit();
+
   MX_SPI1_Init();
   MX_ADC_Init();
   MX_I2C1_Init();
@@ -119,10 +119,8 @@ static inline void pwrInit( void ){
   // Stop mode enable, Interrupt-Wakeup, SleepOnExit enable
   SCB->SCR = (SCB->SCR & ~SCB_SCR_SEVONPEND_Msk) | SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk;
 
-  // Выключаем VREFIN при остановке
-  PWR->CR |= PWR_CR_ULP;
-  // Быстрое просыпание: не ждем, пока восстановится VREFIN, проверяем только при запуске АЦП
-  PWR->CR |= PWR_CR_FWU;
+  // Выключаем VREFIN при остановке + Быстрое просыпание: не ждем, пока восстановится VREFIN, проверяем только при запуске АЦП
+  PWR->CR |= PWR_CR_ULP | PWR_CR_FWU;
 }
 
 static inline void eepromUnlock( void ){

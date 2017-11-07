@@ -1,15 +1,12 @@
 /*
- * rfm69.c
+ * spi.c
  *
- *  Created on: 3 нояб. 2017 г.
+ *  Created on: 7 нояб. 2017 г.
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
-#include "main.h"
-#include "rfm69.h"
-
-uint8_t txBuffer[66];
-uint8_t rxBuffer[66];
+#include <spi.h>
+#include "stm32l0xx.h"
 
 
 /* SPI1 init function */
@@ -106,4 +103,6 @@ int8_t spiTransRecv_s( uint8_t *txBuf, *rxBuf, len ){
 
   return 0;
 }
+
+
 

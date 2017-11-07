@@ -8,6 +8,7 @@
 #ifndef ADC_H_
 #define ADC_H_
 
-
+void adcInit();
+void batStart();
 
 #endif /* ADC_H_ */

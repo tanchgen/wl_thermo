@@ -100,10 +100,18 @@ enum {
   TRUE
 };
 
+#if 0
 enum{
   RESET,
   SET
 };
+#endif
+
+enum {
+  STAT_T_MESUR,
+  STAT_T_READ,
+  STAT_T_CPLT,
+} eState;
 
 // Структура сохраняемых в EEPROM параметров
 typedef struct {
@@ -118,13 +126,16 @@ typedef struct{
 } tSensData;
 
 typedef struct{
+  unsigned int thermoErr : 1;
   unsigned int batCplt : 1;
   unsigned int thermCplt : 1;
 } tFlags;
 
-extern tFlags flags;
+extern volatile uint32_t mTick;
 extern tEeBackup eeBackup;
-extern tSensData sensData;
+extern volatile tSensData sensData;           // Структура измеряемых датчиком параметров
+extern volatile tFlags flags;                 // Флаги состояний системы
+
 
 /* ########################## Assert Selection ############################## */
 /**

@@ -1,7 +1,7 @@
-/*
+п»ї/*
  * time.c
  *
- *  Created on: 31 окт. 2017 г.
+ *  Created on: 31 РѕРєС‚. 2017 Рі.
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
@@ -21,7 +21,7 @@ static inline void RTC_SetDate( tRtc * prtc );
 static inline void RTC_GetTime( tRtc * prtc );
 static inline void RTC_GetDate( tRtc * prtc );
 
-// *********** Инициализация структуры ВРЕМЯ (сейчас - системное ) ************
+// *********** РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЃС‚СЂСѓРєС‚СѓСЂС‹ Р’Р Р•РњРЇ (СЃРµР№С‡Р°СЃ - СЃРёСЃС‚РµРјРЅРѕРµ ) ************
 inline void rtcConfig(void){
   // Enable the LSE
   RCC->CSR |= RCC_CSR_LSEON;
@@ -100,9 +100,9 @@ void timeInit( void ) {
 
 }
 
-// Получение системного мремени
+// РџРѕР»СѓС‡РµРЅРёРµ СЃРёСЃС‚РµРјРЅРѕРіРѕ РјСЂРµРјРµРЅРё
 uint32_t getTick( void ) {
-  // Возвращает количество тиков
+  // Р’РѕР·РІСЂР°С‰Р°РµС‚ РєРѕР»РёС‡РµСЃС‚РІРѕ С‚РёРєРѕРІ
   return myTick;
 }
 
@@ -126,7 +126,7 @@ int32_t   mon, year;
 
   /* Calculate number of days. */
   mon = prtc->month - 1;
-  // Годы считаем от 1900г.
+  // Р“РѕРґС‹ СЃС‡РёС‚Р°РµРј РѕС‚ 1900Рі.
   year = (prtc->year + 100) - _TBIAS_YEAR;
   days  = Daysto32(year, mon) - 1;
   days += 365 * year;
@@ -179,7 +179,7 @@ void xUtime2Tm( tRtc * prtc, tXtime secsarg){
   /* determine year */
   for (year = days / 365; days < (i = Daysto32(year, 0) + 365*year); ) { --year; }
   days -= i;
-  // Годы выставляем от эпохи 2000г., а не 1900г., как в UNIX Time
+  // Р“РѕРґС‹ РІС‹СЃС‚Р°РІР»СЏРµРј РѕС‚ СЌРїРѕС…Рё 2000Рі., Р° РЅРµ 1900Рі., РєР°Рє РІ UNIX Time
   prtc->year = (year - 100) + _TBIAS_YEAR;
 
     /* determine month */
@@ -203,9 +203,9 @@ tXtime getRtcTime( void ){
   return xTm2Utime( &rtc );
 }
 
-/* Установка будильника
- *  xtime - UNIX-времени
- *  alrm - номере будильника
+/* РЈСЃС‚Р°РЅРѕРІРєР° Р±СѓРґРёР»СЊРЅРёРєР°
+ *  xtime - UNIX-РІСЂРµРјРµРЅРё
+ *  alrm - РЅРѕРјРµСЂРµ Р±СѓРґРёР»СЊРЅРёРєР°
  */
 void setAlrm( tXtime xtime, uint8_t alrm ){
   tRtc tmpRtc;
@@ -214,9 +214,9 @@ void setAlrm( tXtime xtime, uint8_t alrm ){
   RTC_SetAlrm( &tmpRtc, alrm );
 }
 
-/* Получениевремени будильника
- *  alrm - номере будильника
- *  Возвращает - UNIX-время
+/* РџРѕР»СѓС‡РµРЅРёРµРІСЂРµРјРµРЅРё Р±СѓРґРёР»СЊРЅРёРєР°
+ *  alrm - РЅРѕРјРµСЂРµ Р±СѓРґРёР»СЊРЅРёРєР°
+ *  Р’РѕР·РІСЂР°С‰Р°РµС‚ - UNIX-РІСЂРµРјСЏ
  */
 tXtime getRtcTime( uint8_t alrm ){
   tRtc tmpRtc;
@@ -229,15 +229,15 @@ tXtime getRtcTime( uint8_t alrm ){
 void timersHandler( void ) {
 
 #if 0
-  // Таймаут timerCount1
+  // РўР°Р№РјР°СѓС‚ timerCount1
   if ( timerCount1 > 1) {
     timerCount1--;
   }
-  // Таймаут timerCount2
+  // РўР°Р№РјР°СѓС‚ timerCount2
   if ( timerCount2 > 1) {
     timerCount2--;
   }
-  // Таймаут timerCount3
+  // РўР°Р№РјР°СѓС‚ timerCount3
   if ( timerCount3 > 1) {
     timerCount3--;
   }
@@ -250,15 +250,15 @@ void timersHandler( void ) {
 void timersProcess( void ) {
 
 #if 0
-  // Таймаут timerCount1
+  // РўР°Р№РјР°СѓС‚ timerCount1
   if ( timerCount1 == 0) {
     timerCount1 = TOUTCOUNT1;
   }
-  // Таймаут timerCount2
+  // РўР°Р№РјР°СѓС‚ timerCount2
   if ( timerCount2 == 0) {
     timerCount2 = TOUTCOUNT2;
   }
-  // Таймаут timerCount3
+  // РўР°Р№РјР°СѓС‚ timerCount3
   if ( timerCount3 == 3) {
     timerCount3 = TOUTCOUNT3;
   }
@@ -268,7 +268,7 @@ void timersProcess( void ) {
   }
 }
 
-// Задержка в мс
+// Р—Р°РґРµСЂР¶РєР° РІ РјСЃ
 void myDelay( uint32_t del ){
   uint32_t finish = myTick + del;
   while ( myTick < finish)
@@ -336,7 +336,7 @@ static void RTC_GetDate( tRtc * prtc ){
 
 void RTC_SetAlrm( tRtc * prtc, uint8_t alrm ){
   register uint32_t temp = 0U;
-  // Если alrm = 0 (ALRM_A) : ALRMAR, есди alrm = 1 (ALRM_B) : ALRMBR
+  // Р•СЃР»Рё alrm = 0 (ALRM_A) : ALRMAR, РµСЃРґРё alrm = 1 (ALRM_B) : ALRMBR
   register uint32_t * palrm = (uint32_t *)&(RTC->ALRMAR) + alrm;
 
   RTC->WPR = 0xCA;
@@ -357,7 +357,7 @@ void RTC_SetAlrm( tRtc * prtc, uint8_t alrm ){
 }
 
 void RTC_GetAlrm( tRtc * prtc, uint8_t alrm ){
-  // Если alrm = 0 (ALRM_A) : ALRMAR, есди alrm = 1 (ALRM_B) : ALRMBR
+  // Р•СЃР»Рё alrm = 0 (ALRM_A) : ALRMAR, РµСЃРґРё alrm = 1 (ALRM_B) : ALRMBR
   register uint32_t * palrm = (uint32_t *)&(RTC->ALRMAR) + alrm;
 
   prtc->date = BCD2BIN( *palrm >> RTC_POSITION_ALMA_DU );

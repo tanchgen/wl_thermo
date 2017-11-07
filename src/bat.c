@@ -5,13 +5,12 @@
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
-#include <adc.h>
-#include <init.h>
 #include "stm32l0xx.h"
 #include "stm32l0xx_ll_adc.h"
 
 #include "main.h"
-#include "adc.h"
+#include <init.h>
+#include <bat.h>
 
 /* ADC init function */
 void adcInit(void){
@@ -30,10 +29,10 @@ void adcInit(void){
 
   // Прерывание по окончанию преобразования
   ADC1->IER = ADC_IER_EOCIE;
-  ADC->CCR |= ADC_CCR_VREFEN; /* (6) */
+  ADC->CCR |= ADC_CCR_VREFEN;
 
-  NVIC_EnableIRQ(ADC1_COMP_IRQn); /* (1) */
-  NVIC_SetPriority(ADC1_COMP_IRQn,0); /* (2) */
+  NVIC_EnableIRQ(ADC1_COMP_IRQn);
+  NVIC_SetPriority(ADC1_COMP_IRQn,0);
 
   // Калибровка АЦП
   if( eeBackup.adcCal == 0x7F ){
@@ -59,6 +58,10 @@ void adcInit(void){
 
 }
 
-
-
+void batStart( void ){
+  // Ждем, когда запустится VREFINT
+  while( (PWR->CSR & PWR_CSR_VREFINTRDYF) == 0 )
+  {}
+  ADC1->CR |= ADC_CR_ADSTART;
+}
 

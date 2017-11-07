@@ -102,15 +102,8 @@ void PendSV_Handler(void)
 /**
 * @brief This function handles System tick timer.
 */
-void SysTick_Handler(void)
-{
-  /* USER CODE BEGIN SysTick_IRQn 0 */
-
-  /* USER CODE END SysTick_IRQn 0 */
-  
-  /* USER CODE BEGIN SysTick_IRQn 1 */
-
-  /* USER CODE END SysTick_IRQn 1 */
+void SysTick_Handler(void) {
+  mTick++;
 }
 
 /******************************************************************************/
@@ -134,7 +127,10 @@ void ADC1_COMP_IRQHandler(void){
     ADC1->CR |= ADC_CR_ADEN;
   }
   else {
-    sensData.bat = ADC1->DR;
+    uint32_t vrefCal = *((uint16_t *)0x1FF80078);
+    uint32_t vref = ADC1->DR;
+    sensData.bat = (uint32_t)((3000L * vrefCal)/vref);
+
     flags.batCplt = TRUE;
     // Не пара ли передавать данные серверу?
     dataSendTry();
@@ -163,6 +159,7 @@ void EXTI0_1_IRQHandler(void)
 void I2C1_IRQHandler(void)
 {
   // TODO: Обработка прерывания I2C: работа с термодатчиком
+  thermoIrqHandler();
 }
 
 /* USER CODE BEGIN 1 */
