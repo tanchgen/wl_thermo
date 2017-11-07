@@ -5,105 +5,398 @@
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
+#include "stm32l0xx.h"
+
 #include "main.h"
+#include "spi.h"
 #include "rfm69.h"
 
-uint8_t txBuffer[66];
-uint8_t rxBuffer[66];
+void rfmFreqSet( uint32_t freq );
+
+tRfm  rfm;
+//uint8_t rfmTXBuf[64];     // Буфер передаваемых на RFM69 данных
+tPkt pkt;            // Структура принятого пакета
+//extern uint8_t tmpVal;
+
+// Определение значения частоты трансивера для регистров RFM69HW
+#define CHANN_FREQ( c ) (((((int32_t)(c) - 3 ) * CHANN8_FREQ_STEP)) / FR_STEP) + CHANN8_3_FREQ
+//#define CHANN_FREQ( channel ) ((((uint32_t)channel * CHANN_FREQ_STEP) + CHANN_NULL_FREQ) / FR_STEP)
 
 
-/* SPI1 init function */
-void spiInit(void) {
+static inline void rfDataInit( void );
+static inline void rfmRegSetup( void );
+static inline void dioInit( void );
 
-  // ----------- SPI GPIO configration ----------------------
+// Начальный сброс модуля
+void rfmRst( void ){
+  //Установить "1" на линии NSS
+  RFM_RST_PORT->BSRR |= RFM_RST_PIN;
+  mDelay( 1 );
+  RFM_RST_PORT->BRR |= RFM_RST_PIN;
+  mDelay( 10 );
+}
+
+// Чтение значения регистра
+uint8_t rfmRegRead( uint8_t addr ){
+  uint8_t rxData[2];
+  uint8_t txData[2];
+
+  // Выставляем бит "чтение"
+  txData[0] = addr & 0x7F;
+  // Отправляем адрес
+  spiTransRecv_s( txData, rxData, 2 );
+  // Считывем значение регистра
+  return rxData[1];
+}
+
+// Запись значения регистра
+void rfmRegWrite( uint8_t addr, uint8_t data ){
+  uint8_t rxData[2];
+  uint8_t txData[2];
+
+  // Выставляем бит "запись"
+  txData[0] = addr | 0x80;
+  txData[1] = data;
+  // Отправляем адрес
+  spiTransRecv_s( txData, rxData, 2 );
+
+}
+
+void rfmInit( void ){
+  rfDataInit();
+  // Настройка выходов DIO_RFM и прерывания от DIO0 и DIO4 (RSSI)
+  dioInit();
+
+  // Начальный сброс модуля
+  rfmRst();
+  // Установка начальных значений регистров
+  rfmRegSetup();
+}
+
+
+// Установка частотного канала
+void rfmChannelSet( uint16_t channel ){
+  uint32_t chFr;
+
+  // Вычисляем частоту канала
+  chFr = CHANN_FREQ( channel );
+  rfmFreqSet( chFr );
+}
+
+// Установка частоты несущей
+void rfmFreqSet( uint32_t freq ){
+  uint8_t oldMode;
+  uint8_t txBuf[4];
+  uint8_t rxBuf[4];
+
+  // Читаем действуюший режим
+  oldMode = rfmRegRead( REG_OPMODE ) & REG_OPMODE_MODE;
+  if( (oldMode ) == REG_OPMODE_TX ){
+    // Если в режиме TX - прерводим в режим RX
+    rfmSetOpmode_s( REG_OPMODE_RX );
+  }
+  // Формируем буфер передачи (MSB)
+
+  txBuf[0] = REG_FRF_MSB | 0x80;
+  txBuf[1] = (uint8_t)(freq >> 16);
+  txBuf[2] = (uint8_t)(freq >> 8);
+  txBuf[3] = (uint8_t)freq;
+  spiTransRecv_s( txBuf, rxBuf, 4 );
+
+  if( (oldMode ) == REG_OPMODE_RX ){
+    // Если был в режиме RX - прерводим в режим FS
+    rfmSetOpmode_s( REG_OPMODE_FS );
+  }
+
+  rfmSetOpmode_s( oldMode );
+  rfm.mode = oldMode >> 2;
+}
+
+
+// Переключение рабочего режима с блокировкой
+void rfmSetOpmode_s( uint8_t opMode ){
+  uint8_t nowMode;
+
+  nowMode = rfmRegRead( REG_OPMODE );
+  nowMode &= (~REG_OPMODE_MODE);
+  nowMode |= opMode;
+  rfmRegWrite( REG_OPMODE, nowMode );
+
+  // Проверяем/ждем что режим включился
+  while( (rfmRegRead(REG_IRQ_FLAG1) & REG_IF1_MODEREADY) == 0 )
+  {}
+  rfm.mode = opMode >> 2;
+}
+
+// Салибровка RC-генератора
+void rfmRcCal( void ){
+  rfmRegWrite( REG_RCCAL, REG_RCCAL_START );
+
+  // Проверяем/ждем что калибровка завершена
+  while( (rfmRegRead(REG_RCCAL) & REG_RCCAL_DONE) == 0 )
+  {}
+
+}
+
+
+// Передача данных в эфир с ожиданием окончания передачи
+void rfmTransmit_s( tPkt * ppkt ){
+  uint8_t rc;
+
+  rfmTransmit( ppkt );
+
+  // Ждем, пока закончится передача
+  while( (rc=dioRead(DIO_PAYL_RDY)) == 0 )
+  {}
+}
+
+
+// Передача данных в эфир
+void rfmTransmit( tPkt *pPkt ){
+  uint8_t txBuf[67];
+
+  // Формируем пакет для записи в FIFO
+  // Заносим адрес FIFO + бит записи: regAddrByte
+  txBuf[0] = REG_FIFO | 0x80;
+  // Сначала загоняем длину payload (len) + 1 байт (байт адреса нода-получателя): paylLenByte
+  txBuf[1] = pPkt->payLen + 1;
+  // Загоняем байт адреса нода-получателя: nodeAddrByte
+  txBuf[2] = pPkt->nodeAddr;
+  for( uint8_t i = 0; i < pPkt->payLen; i++ ){
+    txBuf[3+i] = pPkt->payBuf[i];
+  }
+  // Опустошаем FIFO
+  while( dioRead(DIO_RX_FIFONE) == SET ){
+    rfmRegRead( REG_FIFO );
+  }
+
+  // Записываем все в FIFO (длина = regAddrByte + paylLenByte + nodeAddrByte + len)
+  spiTrans_s( txBuf, pPkt->payLen + 3);
+
+  // Переводим в режим передачи
+  if( rfm.mode != MODE_TX ){
+    // Переводим в режим TX-mode
+    rfmSetOpmode_s( REG_OPMODE_TX );
+  }
+}
+
+
+/* Прием данных из эфира
+ * data - приемный буфер
+ * len - максимальная длина
+ * Возвращает реальное количество принятых байт
+ */
+
+uint8_t rfmReceive( tPkt * pkt ){
+ uint8_t rc;
+
+  // Проверяем, получен ли пакет полностью
+ if( (rc = dioRead(DIO_PAYL_RDY)) == RESET  ){
+    return 0;
+  }
+
+  // Считываем длину принимаемых данных (payload) (длина пакета - 1 байт адреса)
+  pkt->payLen = rfmRegRead( REG_FIFO ) - 1;
+
+  if( pkt->payLen > sizeof(uPayload) ){
+  pkt->payLen = sizeof(uPayload);
+  }
+
+  // Считываем байт адреса
+    pkt->nodeAddr = rfmRegRead( REG_FIFO );
+  // Считываем полученные данные
+  for(   uint8_t i = 0; i < pkt->payLen; i++ ){
+    pkt->payBuf[i] = rfmRegRead( REG_FIFO );
+  };
+
+  return pkt->payLen;
+}
+
+void rfmRecvStop( void ){
+  // Выключаем RFM69
+  rfmSetOpmode_s( REG_OPMODE_SLEEP );
+  // Если в FIFO осталось что-то - в мусор...
+  while( dioRead(DIO_RX_FIFONE) ){
+    rfmRegRead( REG_FIFO );
+  }
+}
+
+uint16_t channelSearch( uint16_t count ){
+  uint16_t ch;
+  uint8_t rssi;
+  uint8_t bestRssi = 0xFF;
+  uint16_t bestCh = 0;
+
+  for( ch = 0; ch < count; ch++ ){
+    rfmChannelSet( ch );
+    mDelay(3);
+    if(dioRead( DIO_RX_RSSI ) != 0){
+      if( (rssi = rfmRegRead( REG_RSSI_VAL )) < bestRssi ){
+        bestRssi = rssi;
+        bestCh = ch;
+      }
+    }
+  }
+  rfmChannelSet( bestCh );
+  mDelay(3);
+  return bestCh;
+}
+
+// Инициализация выводов DIO_RFM
+static inline void dioInit( void ){
+
   RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
   RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
 
-  /**SPI1 GPIO Configuration
-  PA4   ------> SPI1_NSS
-  PA5   ------> SPI1_SCK
-  PA7   ------> SPI1_MOSI
-  */
-  GPIOA->MODER = (GPIOA->MODER & ~(GPIO_MODER_MODE4 | GPIO_MODER_MODE5 | GPIO_MODER_MODE7))\
-                  | (GPIO_MODER_MODE4_1 | GPIO_MODER_MODE5_1 | GPIO_MODER_MODE7_1);
-  GPIOA->AFR[0] = (GPIOA->AFR[0] & ~((0xFL<<(4 * 4)) | (0xFL<<(5 * 4)) | (0xFL<<(7 * 4))));
-  GPIOA->OSPEEDR |= (0x03L << (4 * 2)) | (0x03L << (5 * 2)) | (0x03L<<(7 * 2));
-  //   PB4   ------> SPI1_MISO
-  GPIOB->MODER = (GPIOB->MODER & ~(GPIO_MODER_MODE4)) | GPIO_MODER_MODE4_1;
-  GPIOB->AFR[0] = (GPIOB->AFR[0] & ~((0xFL<<(3 * 4))));
-  GPIOB->OSPEEDR |= (0x03L << (4 * 2));
+  //---- Инициализация выводов для RFM_RST: Выход, 400кГц, ОК, без подтяжки ---
+  RFM_RST_PORT->OTYPER |= RFM_RST_PIN;
+  RFM_RST_PORT->OSPEEDR &= ~(0x3 << (RFM_RST_PIN_NUM * 2));
+  RFM_RST_PORT->PUPDR &= ~(0x3<< (RFM_RST_PIN_NUM * 2));
+  RFM_RST_PORT->MODER = (RFM_RST_PORT->MODER &  ~(0x3<< (RFM_RST_PIN_NUM * 2))) |
+                         (0x1<< (RFM_RST_PIN_NUM * 2));
 
-  /* Enable the peripheral clock SPI1 */
-  RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+  //---- Инициализация выводов для DIO0 RFM69: вход, 2МГц, без подтяжки, EXTI
+  DIO0_PORT->OTYPER &= ~DIO0_PIN;
+  DIO0_PORT->OSPEEDR = (DIO0_PORT->OSPEEDR  & ~(0x3 << (DIO0_PIN_NUM * 2))) |
+                       (0x1<< (DIO0_PIN_NUM * 2));
+  DIO0_PORT->PUPDR &= ~(0x3<< (DIO0_PIN_NUM * 2));
+  DIO0_PORT->MODER &= ~(0x3 << (DIO0_PIN_NUM * 2));
+  // Инициализация прерывания от DIO0
+  // Select Port A for pin 0 extended interrupt by writing 0000 in EXTI0
+  SYSCFG->EXTICR[DIO0_PIN_NUM / 4] &= (uint16_t)~(DIO0_PORT_NUM << (DIO0_PIN_NUM * 4));
+  // Configure the corresponding mask bit in the EXTI_IMR register
+  EXTI->IMR |= DIO0_PIN;
+  // Configure the Trigger Selection bits of the Interrupt line on rising edge
+  EXTI->RTSR |= DIO0_PIN;
+  // ----------- Configure NVIC for Extended Interrupt --------
+  // Enable Interrupt on EXTI0_1
+  // Set priority for EXTI0_1
+  NVIC_EnableIRQ( DIO0_EXTI_IRQn );
+  NVIC_SetPriority( DIO0_EXTI_IRQn, 0 );
 
-  /* Configure SPI1 in master */
-  // Master selection, BR: Fpclk/2, CPOL and CPHA (rising first edge), 8-bit data frame
-  SPI1->CR1 = (SPI1->CR1 & ~(SPI_CR1_CPOL | SPI_CR1_CPHA | SPI_CR1_SSM)) | SPI_CR1_MSTR;
-  // Slave select output enabled
-  SPI1->CR2 = SPI_CR2_SSOE;
-  SPI1->CR1 |= SPI_CR1_SPE;
+  //---- Инициализация выводов для DIO4 RFM69: вход, 2МГц, без подтяжки, EXTI
+  DIO4_PORT->OTYPER &= ~DIO4_PIN;
+  DIO4_PORT->OSPEEDR = (DIO4_PORT->OSPEEDR  & ~(0x3 << (DIO4_PIN_NUM * 2))) |
+                       (0x1<< (DIO4_PIN_NUM * 2));
+  DIO4_PORT->PUPDR &= ~(0x3<< (DIO4_PIN_NUM * 2));
+  DIO4_PORT->MODER &= ~(0x3 << (DIO4_PIN_NUM * 2));
+  // Инициализация прерывания от DIO4
+  // Select Port A for pin 0 extended interrupt by writing 0000 in EXTI0
+  SYSCFG->EXTICR[DIO4_PIN_NUM / 4] &= (uint16_t)~(DIO4_PORT_NUM << (DIO4_PIN_NUM * 4));
+  // Configure the corresponding mask bit in the EXTI_IMR register
+  EXTI->IMR |= DIO4_PIN;
+  // Configure the Trigger Selection bits of the Interrupt line on rising edge
+  EXTI->RTSR |= DIO4_PIN;
+  // ----------- Configure NVIC for Extended Interrupt --------
+  // Enable Interrupt on EXTI0_1
+  // Set priority for EXTI0_1
+  NVIC_EnableIRQ( DIO4_EXTI_IRQn );
+  NVIC_SetPriority( DIO4_EXTI_IRQn, 0 );
+
+
+  //---- Инициализация выводов для DIO1 - DIO3, DIO5 RFM69: вход, 2МГц, без подтяжки
+  DIO1_PORT->OTYPER &= ~DIO1_PIN;
+  DIO1_PORT->OSPEEDR = (DIO1_PORT->OSPEEDR  & ~(0x3 << (DIO1_PIN_NUM * 2))) |
+                       (0x1<< (DIO1_PIN_NUM * 2));
+  DIO1_PORT->PUPDR &= ~(0x3<< (DIO1_PIN_NUM * 2));
+  DIO1_PORT->MODER &= ~(0x3 << (DIO1_PIN_NUM * 2));
+
+  DIO2_PORT->OTYPER &= ~DIO2_PIN;
+  DIO2_PORT->OSPEEDR = (DIO2_PORT->OSPEEDR  & ~(0x3 << (DIO2_PIN_NUM * 2))) |
+                       (0x1<< (DIO2_PIN_NUM * 2));
+  DIO2_PORT->PUPDR &= ~(0x3<< (DIO2_PIN_NUM * 2));
+  DIO2_PORT->MODER &= ~(0x3 << (DIO2_PIN_NUM * 2));
+
+  DIO3_PORT->OTYPER &= ~DIO3_PIN;
+  DIO3_PORT->OSPEEDR = (DIO3_PORT->OSPEEDR  & ~(0x3 << (DIO3_PIN_NUM * 2))) |
+                       (0x1<< (DIO3_PIN_NUM * 2));
+  DIO3_PORT->PUPDR &= ~(0x3<< (DIO3_PIN_NUM * 2));
+  DIO3_PORT->MODER &= ~(0x3 << (DIO3_PIN_NUM * 2));
+
+  DIO5_PORT->OTYPER &= ~DIO5_PIN;
+  DIO5_PORT->OSPEEDR = (DIO5_PORT->OSPEEDR  & ~(0x3 << (DIO5_PIN_NUM * 2))) |
+                       (0x1<< (DIO5_PIN_NUM * 2));
+  DIO5_PORT->PUPDR &= ~(0x3<< (DIO5_PIN_NUM * 2));
+  DIO5_PORT->MODER &= ~(0x3 << (DIO5_PIN_NUM * 2));
+
 }
 
+static inline void rfDataInit( void ){
+  uint8_t tmp;
 
-// Передача по SPI в блокирующем режима
-int8_t spiTrans_s( uint8_t *buf, len ){
-  uint32_t tout;
-
-  tout = mTick + 10;
-  // Отправка из буфера tx в буфер SPI
-  while( len ){
-    if( ((SPI1->SR & SPI_SR_TXE) != 0 )){
-      *(uint8_t *)&(SPI2->DR) = *buf++;
-    }
-    if( tout < mTick){
-      return -1;
-    }
+  // Инициализация структуры Rfm
+  rfm.mode = MODE_STDBY;
+  // Считываем из EEPROM параметры
+  if( (tmp = eeBackup.rfmNetId) == 0){
+    // В еепром ничего не записанно
+    rfm.netId = NET_ID;
+    rfm.channel = CHANN_DEF;
+    rfm.nodeAddr = NODE_ADDR;
+    rfm.txPwr = TX_PWR_10;
   }
-  // Ждем окончания передачи
-  tout = mTick + 10;
-  while( (SPI1->SR & SPI_SR_BSY) != 0 ){
-    if( tout < mTick){
-      return -1;
-    }
+  else {
+    rfm.netId = tmp;
+    rfm.nodeAddr = eeBackup.rfmNodeAddr;
+    rfm.channel = eeBackup.rfmChannel;
+    rfm.txPwr = ((tmp=eeBackup.rfmTxPwr) > TX_PWR_10)? TX_PWR_10 : tmp;;
   }
-
-  return 0;
 }
 
-// Прием по SPI в блокирующем режима
-int8_t spiRecv_s( uint8_t *buf, len ){
+static inline void rfmRegSetup( void ){
+  rfmSetOpmode_s( REG_OPMODE_STDBY );
+  // Калибровка RC-генратора
+  rfmRcCal();
+  // Настройка bitrate
+  rfmRegWrite( REG_BR_MSB, 0x1A );   // Default
+  rfmRegWrite( REG_BR_LSB, 0x0B );   // Default
+  // rfmRegWrite( REG_BR_MSB, 0x68 );
+  // rfmRegWrite( REG_BR_LSB, 0x2B );
 
-  return 0;
+  // Настройка девиации частоты
+  rfmRegWrite( REG_FDEV_MSB, 0x00 );
+  rfmRegWrite( REG_FDEV_LSB, 0x52 );   // Default
+  // rfmRegWrite( REG_FDEV_LSB, 0x3B );
+  // Настройка BW-фильтра
+  rfmRegWrite( REG_RX_BW, 0x55 );   // Default
+  //rfmRegWrite( REG_RX_BW, 0x4D );
+  // Установка частоты несущей
+  rfmChannelSet( rfm.channel );
+  // Настройка AFC Bw
+  rfmRegWrite( REG_AFC_BW, 0x8B );
+ // rfmRegWrite( REG_AFCFEI, REG_AFCFEI_AFC_AUTO );
+  // Настройка усилителя приемника: Вх. = 200 Ом, Усиление - AGC
+  rfmRegWrite( REG_LNA, 0x80 );
+
+  // Настройка усилителя передатчика PA0 - выкл, PA1 - вкл.  Мощность - +10 дБм: (-18 + 28)
+  rfmRegWrite( REG_PA_LVL, 0x40 | rfm.txPwr );
+  // Настройка DIO:
+  // DIO0 - 0b00  // RX- CrcOk, TX- PacketSent
+  // DIO1 - 0b01  // RX- FifoFull, TX- FifoFull
+  // DIO2 - 0b00  // RX- FifoNotEmpty, TX- FifoNotEmpty
+  // DIO3 - 0b10  // RX- SyncAddr, TX - ----
+  // DIO4 - 0b10  // RX- RxReady, TX - ----
+  // DIO5 - 0b00  // RX- ClkOut, TX - ClkOut
+  rfmRegWrite( REG_DIO_MAP1, 0x12 );
+  rfmRegWrite( REG_DIO_MAP2, 0x47 );
+  // Настройка Sync-последовательности: Sync(NetID - вкл), 2 байта, (Net ID = 0x0101)
+  rfmRegWrite( REG_SYNC1, (uint8_t)(rfm.netId >> 8) );
+  rfmRegWrite( REG_SYNC2, (uint8_t)rfm.netId );
+  rfmRegWrite( REG_SYNC_CFG, 0x88 );
+
+  // Запись адреса нода - 0x22 и широковещательный адрес -0xFF
+  rfmRegWrite( REG_NODE_ADDR, rfm.nodeAddr );
+  rfmRegWrite( REG_BRDCAST, BRDCAST_ADDR );
+
+  // Настройка пакета: Длина пакета - переменная, CRC - вкл, фильтрация адресов: адресс нода + широковещательный
+  rfmRegWrite( REG_PACK_CFG, REG_PACK_CFG_VAR | REG_PACK_CFG_CRCON | REG_PACK_CFG_ADDRBRD);
+
+  // Настройка минимальной рабочей границы  RSSI ( -114дБ )
+  rfmRegWrite( REG_RSSI_THRESH, 0xE4 );
+  // Настройка минимальной рабочей границы  RSSI ( -90дБ )
+  // rfmRegWrite( REG_RSSI_THRESH, 0xB4 );
+
+  // Передача начинается сразу по условию: В FIFO есть данные и установлен TX-режим
+  rfmRegWrite( REG_FIFO_THRESH, 0x8F );
+  // Настройка DAGC
+  rfmRegWrite( REG_TEST_DAGC, 0x30 );
 }
-
-// Передача с одновременным приемом по SPI в блокирующем режима
-int8_t spiTransRecv_s( uint8_t *txBuf, *rxBuf, len ){
-  uint8_t txCount = len;
-  uint32_t tout;
-
-  // На всю операцию отводим не более 10мс
-  tout = mTick + 10;
-  // Отправка из буфера tx в буфер SPI
-  while( len ){
-    if( txCount && ((SPI1->SR & SPI_SR_TXE) != 0) ){
-      *(uint8_t *)&(SPI2->DR) = *txBuf++;
-    }
-    if( (SPI1->SR & SPI_SR_RXNE) != 0 ){
-      *rxBuf++ = *(uint8_t *)&(SPI2->DR);
-      len--;
-    }
-    if( tout < mTick){
-      return -1;
-    }
-  }
-  // Ждем окончания приема
-  tout = mTick + 10;
-  while( (SPI1->SR & SPI_SR_BSY) != 0 ){
-    if( tout < mTick){
-      return -1;
-    }
-  }
-
-  return 0;
-}
-

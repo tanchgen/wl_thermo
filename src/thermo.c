@@ -5,17 +5,17 @@
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
-#include <thermo.h>
 #include "stm32l0xx_ll_i2c.h"
 
 #include "main.h"
+#include "thermo.h"
 
 
-static inline uint16_t thermoRcv( void );
-static inline thermoErrHandler( void );
-static inline void thermoSend( uint8_t *buf );
+static inline int16_t thermoRcv( void );
+static inline void thermoErrHandler( void );
+static void thermoSend( uint8_t *buf );
 
-inline void i2cGpioInit(void) {
+static inline void i2cGpioInit(void) {
   // SCL - PB6, SDA - PB7
   RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
 
@@ -34,7 +34,7 @@ inline void i2cGpioInit(void) {
 }
 
 
-inline void i2cInit( void ){
+static inline void i2cInit( void ){
   RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;
   // Use APBCLK for I2C CLK
   RCC->CCIPR &= ~RCC_CCIPR_I2C1SEL;
@@ -55,36 +55,42 @@ inline void i2cInit( void ){
   LL_I2C_DisableGeneralCall(I2C1);
   LL_I2C_EnableClockStretching(I2C1);
 
-  NVIC_SetPriority(I2C1_IRQn, 0);
-  NVIC_EnableIRQ(I2C1_IRQn);
+//  NVIC_SetPriority(I2C1_IRQn, 0);
+//  NVIC_EnableIRQ(I2C1_IRQn);
+}
+
+void thermoInit( void ){
+  uint8_t buf[2];
+
+  i2cGpioInit();
+  i2cInit();
+  // Настройки термодатчика
+  buf[0] = THERMO_REG_CR;
+  buf[1] = ((uint8_t)~(THERMO_OS)) | THERMO_R09 | THERMO_SD;
+  thermoSend( buf );
 }
 
 void thermoStart( void ){
   uint8_t buf[2];
 
-  // Отправляем команду проснутся и начать измерение
+  // Отправляем команду начать измерение
   buf[0] = THERMO_REG_CR;
-  buf[1] = THERMO_START;
+  buf[1] = THERMO_OS | THERMO_R09 | THERMO_SD;
   thermoSend( buf );
-  if( flags.thermoErr == 0 ){
-    // Отправляем команду "Уснуть по окончании измерения"
-    buf[0] = THERMO_REG_CR;
-    buf[1] = THERMO_STOP;
-    thermoSend( buf );
-  }
+// TODO: Уснуть на время преобразования мс: 27.5 - 9бит, 55 - 10бит, 110 - 11бит, 220 - 12бит
   state = STAT_T_MESUR;
 }
 
 uint8_t thermoRead( void ){
   if( flags.thermoErr == 0){
-    thermoRcv();
+    sensData.temp = thermoRcv();
   }
   state = STAT_T_CPLT;
 
   return flags.thermoErr;
 }
 
-static inline uint16_t thermoRcv( void ){
+static inline int16_t thermoRcv( void ){
   union{
     int16_t i16t;
     uint8_t u8t[2];
@@ -149,7 +155,7 @@ static inline uint16_t thermoRcv( void ){
   return (rc.i16t >> 7);
 }
 
-static inline void thermoSend( uint8_t *buf ){
+static void thermoSend( uint8_t *buf ){
   uint32_t tout = mTick + I2C_TOUT;
 
   if( (I2C1->ISR & I2C_ISR_BUSY) == 0 ){
@@ -186,11 +192,11 @@ static inline void thermoSend( uint8_t *buf ){
 
 }
 
-inline void thermoIrqHandler( void ){
-
+void thermoIrqHandler( void ){
+  __NOP();
 }
 
-static inline thermoErrHandler( void ){
+static inline void thermoErrHandler( void ){
   flags.thermoErr = SET;
   sensData.temp = 0xFF00;
   // Сброс I2C

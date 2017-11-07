@@ -13,16 +13,18 @@
 #define BCD2BIN(__VALUE__) (uint8_t)(((uint8_t)((__VALUE__) & (uint8_t)0xF0U) >> (uint8_t)0x4U) * 10U + ((__VALUE__) & (uint8_t)0x0FU))
 
 volatile tRtc rtc;
-volatile tXtime uxTime;
+volatile tUxTime uxTime;
 uint8_t secondFlag = RESET;
 
-static inline void RTC_SetTime( tRtc * prtc );
-static inline void RTC_SetDate( tRtc * prtc );
-static inline void RTC_GetTime( tRtc * prtc );
-static inline void RTC_GetDate( tRtc * prtc );
+static void RTC_SetTime( volatile tRtc * prtc );
+static void RTC_GetTime( volatile tRtc * prtc );
+static void RTC_SetDate( volatile tRtc * prtc );
+static void RTC_GetDate( volatile tRtc * prtc );
+static void RTC_SetAlrm( tRtc * prtc, uint8_t alrm );
+static void RTC_GetAlrm( tRtc * prtc, uint8_t alrm );
 
 // *********** Инициализация структуры ВРЕМЯ (сейчас - системное ) ************
-inline void rtcConfig(void){
+void rtcInit(void){
   // Enable the LSE
   RCC->CSR |= RCC_CSR_LSEON;
   // Wait while it is not ready
@@ -33,10 +35,20 @@ inline void rtcConfig(void){
   // LSE enable for RTC clock
   RCC->CSR = (RCC->CSR & ~RCC_CSR_RTCSEL) | RCC_CSR_RTCSEL_0 | RCC_CSR_RTCEN;
 
-  // --- Configure Alarm A -----
   // Write access for RTC registers
   RTC->WPR = 0xCA;
   RTC->WPR = 0x53;
+
+  // --- Configure Clock Prescaler -----
+  // Enable init phase
+  RTC->ISR = RTC_ISR_INIT;
+  while((RTC->ISR & RTC_ISR_INITF)!=RTC_ISR_INITF)
+  {}
+  // RTCCLOCK deviser
+  RTC->PRER = 0x007F00FF;
+  RTC->ISR =~ RTC_ISR_INIT;
+
+  // --- Configure Alarm A -----
   // Disable alarm A to modify it
   RTC->CR &=~ RTC_CR_ALRAE;
   while((RTC->ISR & RTC_ISR_ALRAWF) != RTC_ISR_ALRAWF)
@@ -60,26 +72,6 @@ inline void rtcConfig(void){
 
 
 }
-
-inline void rtcInit(uint32_t Time){
-
-  // Write access for RTC registers
-  RTC->WPR = 0xCA;
-  RTC->WPR = 0x53;
-  // Enable init phase
-  RTC->ISR = RTC_ISR_INIT;
-  while((RTC->ISR & RTC_ISR_INITF)!=RTC_ISR_INITF)
-  {}
-
-  // RTCCLOCK deviser
-  RTC->PRER = 0x007F00FF;
-  RTC->TR = RTC_TR_PM | Time;
-  RTC->ISR =~ RTC_ISR_INIT;
-  // Disable write access for RTC registers
-  RTC->WPR = 0xFE;
-  RTC->WPR = 0x64;
-}
-
 
 void timeInit( void ) {
 
@@ -118,7 +110,7 @@ const int16_t mos[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
 
 /////////////////////////////////////////////////////////////////////
 
-tXtime xTm2Utime( tRtc * prtc ){
+tUxTime xTm2Utime( volatile tRtc * prtc ){
   /* convert time structure to scalar time */
 int32_t   days;
 int32_t   secs;
@@ -138,14 +130,14 @@ int32_t   mon, year;
   secs += 60 * prtc->min;
   secs += prtc->sec;
 
-  secs += (days * (tXtime)86400);
+  secs += (days * (tUxTime)86400);
 
   return (secs);
 }
 
 /////////////////////////////////////////////////////////////////////
 
-void xUtime2Tm( tRtc * prtc, tXtime secsarg){
+void xUtime2Tm( volatile tRtc * prtc, tUxTime secsarg){
   uint32_t    secs;
   int32_t   days;
   int32_t   mon;
@@ -189,14 +181,14 @@ void xUtime2Tm( tRtc * prtc, tXtime secsarg){
   prtc->date = days - pm[mon] + 1;
 }
 
-void setRtcTime( tXtime xtime ){
+void setRtcTime( tUxTime xtime ){
 
   xUtime2Tm( &rtc, xtime);
   RTC_SetTime( &rtc );
   RTC_SetDate( &rtc );
 }
 
-tXtime getRtcTime( void ){
+tUxTime getRtcTime( void ){
 
   RTC_GetTime( &rtc );
   RTC_GetDate( &rtc );
@@ -207,7 +199,7 @@ tXtime getRtcTime( void ){
  *  xtime - UNIX-времени
  *  alrm - номере будильника
  */
-void setAlrm( tXtime xtime, uint8_t alrm ){
+void setAlrm( tUxTime xtime, uint8_t alrm ){
   tRtc tmpRtc;
 
   xUtime2Tm( &tmpRtc, xtime);
@@ -218,13 +210,16 @@ void setAlrm( tXtime xtime, uint8_t alrm ){
  *  alrm - номере будильника
  *  Возвращает - UNIX-время
  */
-tXtime getRtcTime( uint8_t alrm ){
+tUxTime getAlrm( uint8_t alrm ){
   tRtc tmpRtc;
 
   RTC_GetAlrm( &tmpRtc, alrm );
   return xTm2Utime( &tmpRtc );
 }
 
+void setWkup( void ){
+
+}
 
 void timersHandler( void ) {
 
@@ -269,13 +264,13 @@ void timersProcess( void ) {
 }
 
 // Задержка в мс
-void myDelay( uint32_t del ){
+void mDelay( uint32_t del ){
   uint32_t finish = myTick + del;
   while ( myTick < finish)
   {}
 }
 
-static void RTC_SetTime( tRtc * prtc ){
+static void RTC_SetTime( volatile tRtc * prtc ){
   register uint32_t temp = 0U;
 
   RTC->WPR = 0xCA;
@@ -294,7 +289,7 @@ static void RTC_SetTime( tRtc * prtc ){
   RTC->WPR = 0x64;
 }
 
-static void RTC_SetDate( tRtc * prtc ){
+static void RTC_SetDate( volatile tRtc * prtc ){
   register uint32_t temp = 0U;
 
   RTC->WPR = 0xCA;
@@ -314,7 +309,7 @@ static void RTC_SetDate( tRtc * prtc ){
   RTC->WPR = 0x64;
 }
 
-static void RTC_GetTime( tRtc * prtc ){
+static void RTC_GetTime( volatile tRtc * prtc ){
   if((RTC->ISR & RTC_ISR_RSF) == 0){
     return;
   }
@@ -324,7 +319,7 @@ static void RTC_GetTime( tRtc * prtc ){
     prtc->ss = RTC->SSR;
 }
 
-static void RTC_GetDate( tRtc * prtc ){
+static void RTC_GetDate( volatile tRtc * prtc ){
   if((RTC->ISR & RTC_ISR_RSF) == 0){
     return;
   }
@@ -334,7 +329,7 @@ static void RTC_GetDate( tRtc * prtc ){
   prtc->wday = ( RTC->DR >> RTC_POSITION_DR_WDU ) >> 0x7;
 }
 
-void RTC_SetAlrm( tRtc * prtc, uint8_t alrm ){
+static void RTC_SetAlrm( tRtc * prtc, uint8_t alrm ){
   register uint32_t temp = 0U;
   // Если alrm = 0 (ALRM_A) : ALRMAR, есди alrm = 1 (ALRM_B) : ALRMBR
   register uint32_t * palrm = (uint32_t *)&(RTC->ALRMAR) + alrm;
@@ -356,7 +351,7 @@ void RTC_SetAlrm( tRtc * prtc, uint8_t alrm ){
   RTC->WPR = 0x64;
 }
 
-void RTC_GetAlrm( tRtc * prtc, uint8_t alrm ){
+static void RTC_GetAlrm( tRtc * prtc, uint8_t alrm ){
   // Если alrm = 0 (ALRM_A) : ALRMAR, есди alrm = 1 (ALRM_B) : ALRMBR
   register uint32_t * palrm = (uint32_t *)&(RTC->ALRMAR) + alrm;
 

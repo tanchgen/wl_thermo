@@ -31,8 +31,10 @@
 #include <stdlib.h>
 #include "diag/Trace.h"
 
-#include "Timer.h"
-
+#include "my_time.h"
+#include "bat.h"
+#include "thermo.h"
+#include "spi.h"
 #include "main.h"
 
 volatile uint32_t mTick;
@@ -40,7 +42,7 @@ volatile uint32_t mTick;
 EEMEM tEeBackup eeBackup;     // Структура сохраняемых в EEPROM параметров
 
 volatile tSensData sensData;           // Структура измеряемых датчиком параметров
-volatile eState state;                 // Состояние машины
+volatile eState state;                          // Состояние машины
 volatile tFlags flags;                 // Флаги состояний системы
 
 
@@ -77,21 +79,26 @@ int main(int argc, char* argv[])
 
   /* Initialize all configured peripherals */
   adcInit();
-  i2cInit();
+  thermoInit();
+  spiInit();
+  rtcInit();
+  rfmInit();
 
-  MX_SPI1_Init();
-  MX_ADC_Init();
-  MX_I2C1_Init();
+  // Запустили измерения
+  mesureStart();
 
   // Infinite loop
   while (1){
-    }
+    // Заснули до конца измерения
+    __WFI();
+  }
   // Infinite loop, never return.
 }
 
 static inline void mainInit( void ){
-  // Power ON
+  // Power registry ON
   RCC->APB1ENR |= (RCC_APB1ENR_PWREN);
+  FLASH->ACR |= FLASH_ACR_PRE_READ;
 }
 
 

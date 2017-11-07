@@ -39,21 +39,7 @@
 #ifndef __MAIN_H
 #define __MAIN_H
   /* Includes ------------------------------------------------------------------*/
-#include "stm32l0xx_ll_adc.h"
 #include "stm32l0xx.h"
-#include "stm32l0xx_ll_i2c.h"
-#include "stm32l0xx_ll_crs.h"
-#include "stm32l0xx_ll_rcc.h"
-#include "stm32l0xx_ll_bus.h"
-#include "stm32l0xx_ll_system.h"
-#include "stm32l0xx_ll_exti.h"
-#include "stm32l0xx_ll_cortex.h"
-#include "stm32l0xx_ll_utils.h"
-#include "stm32l0xx_ll_pwr.h"
-#include "stm32l0xx_ll_dma.h"
-#include "stm32l0xx_ll_rtc.h"
-#include "stm32l0xx_ll_spi.h"
-#include "stm32l0xx_ll_gpio.h"
 
 /* USER CODE BEGIN Includes */
 
@@ -61,21 +47,7 @@
 
 /* Private define ------------------------------------------------------------*/
 
-#define DIO0_Pin LL_GPIO_PIN_0
-#define DIO0_GPIO_Port GPIOA
-#define DIO0_EXTI_IRQn EXTI0_1_IRQn
-#define DIO1_Pin LL_GPIO_PIN_1
-#define DIO1_GPIO_Port GPIOA
-#define DIO2_Pin LL_GPIO_PIN_2
-#define DIO2_GPIO_Port GPIOA
-#define DIO3_Pin LL_GPIO_PIN_3
-#define DIO3_GPIO_Port GPIOA
-#define DIO4_Pin LL_GPIO_PIN_6
-#define DIO4_GPIO_Port GPIOA
-#define DIO5_Pin LL_GPIO_PIN_1
-#define DIO5_GPIO_Port GPIOB
-#define RFM_RST_Pin LL_GPIO_PIN_8
-#define RFM_RST_GPIO_Port GPIOB
+
 #ifndef NVIC_PRIORITYGROUP_0
 #define NVIC_PRIORITYGROUP_0         ((uint32_t)0x00000007) /*!< 0 bit  for pre-emption priority,
                                                                  4 bits for subpriority */
@@ -107,7 +79,7 @@ enum{
 };
 #endif
 
-enum {
+typedef enum {
   STAT_T_MESUR,
   STAT_T_READ,
   STAT_T_CPLT,
@@ -116,12 +88,16 @@ enum {
 // Структура сохраняемых в EEPROM параметров
 typedef struct {
   uint8_t adcCal;       // Цалибровочный фактор для АЦП
+  uint8_t rfmNetId;     // ID сети
+  uint8_t rfmChannel;   // Номер канала
+  uint8_t rfmNodeAddr;  // Адрес Нода
+  uint8_t rfmTxPwr;     // Мощность передатчика
 } tEeBackup;
 
 // Структура измеряемых датчиком параметров
-typedef struct{
+typedef struct __packed {
   uint8_t rssi;     // Мощность принимаемого радиосигнала
-  uint8_t temp;     // Измеряемая температура
+  int16_t temp;     // Измеряемая температура
   uint8_t bat;      // Напряжение питания
 } tSensData;
 
@@ -135,7 +111,7 @@ extern volatile uint32_t mTick;
 extern tEeBackup eeBackup;
 extern volatile tSensData sensData;           // Структура измеряемых датчиком параметров
 extern volatile tFlags flags;                 // Флаги состояний системы
-
+extern volatile eState state;                          // Состояние машины
 
 /* ########################## Assert Selection ############################## */
 /**

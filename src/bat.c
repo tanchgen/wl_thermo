@@ -9,8 +9,7 @@
 #include "stm32l0xx_ll_adc.h"
 
 #include "main.h"
-#include <init.h>
-#include <bat.h>
+#include "bat.h"
 
 /* ADC init function */
 void adcInit(void){

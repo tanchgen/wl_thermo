@@ -5,9 +5,10 @@
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
-#include <spi.h>
 #include "stm32l0xx.h"
 
+#include "main.h"
+#include "spi.h"
 
 /* SPI1 init function */
 void spiInit(void) {
@@ -43,7 +44,7 @@ void spiInit(void) {
 
 
 // Передача по SPI в блокирующем режима
-int8_t spiTrans_s( uint8_t *buf, len ){
+int8_t spiTrans_s( uint8_t *buf, uint8_t len ){
   uint32_t tout;
 
   tout = mTick + 10;
@@ -51,6 +52,7 @@ int8_t spiTrans_s( uint8_t *buf, len ){
   while( len ){
     if( ((SPI1->SR & SPI_SR_TXE) != 0 )){
       *(uint8_t *)&(SPI2->DR) = *buf++;
+      len--;
     }
     if( tout < mTick){
       return -1;
@@ -68,13 +70,39 @@ int8_t spiTrans_s( uint8_t *buf, len ){
 }
 
 // Прием по SPI в блокирующем режима
-int8_t spiRecv_s( uint8_t *buf, len ){
+int8_t spiRecv_s( uint8_t *buf, uint8_t len ){
+  uint8_t txCount = len;
+  uint32_t tout;
+
+  // На всю операцию отводим не более 10мс
+  tout = mTick + 10;
+  // Отправка из буфера tx в буфер SPI
+  while( len ){
+    if( txCount && ((SPI1->SR & SPI_SR_TXE) != 0) ){
+      *(uint8_t *)&(SPI2->DR) = 0xFF;
+      txCount--;
+    }
+    if( (SPI1->SR & SPI_SR_RXNE) != 0 ){
+      *buf++ = *(uint8_t *)&(SPI2->DR);
+      len--;
+    }
+    if( tout < mTick){
+      return -1;
+    }
+  }
+  // Ждем окончания приема
+  tout = mTick + 10;
+  while( (SPI1->SR & SPI_SR_BSY) != 0 ){
+    if( tout < mTick){
+      return -1;
+    }
+  }
 
   return 0;
 }
 
 // Передача с одновременным приемом по SPI в блокирующем режима
-int8_t spiTransRecv_s( uint8_t *txBuf, *rxBuf, len ){
+int8_t spiTransRecv_s( uint8_t *txBuf, uint8_t *rxBuf, uint8_t len ){
   uint8_t txCount = len;
   uint32_t tout;
 
@@ -84,6 +112,7 @@ int8_t spiTransRecv_s( uint8_t *txBuf, *rxBuf, len ){
   while( len ){
     if( txCount && ((SPI1->SR & SPI_SR_TXE) != 0) ){
       *(uint8_t *)&(SPI2->DR) = *txBuf++;
+      txCount--;
     }
     if( (SPI1->SR & SPI_SR_RXNE) != 0 ){
       *rxBuf++ = *(uint8_t *)&(SPI2->DR);
@@ -103,6 +132,4 @@ int8_t spiTransRecv_s( uint8_t *txBuf, *rxBuf, len ){
 
   return 0;
 }
-
-
 

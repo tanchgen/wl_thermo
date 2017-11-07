@@ -1,7 +1,7 @@
-/*
+п»ї/*
  * my_time.h
  *
- *  Created on: 31 окт. 2017 г.
+ *  Created on: 31 РѕРєС‚. 2017 Рі.
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
@@ -15,14 +15,14 @@
 #define ALARM_UPDATE_TOUT   100
 
 
-#define ALRM_A      0   // НЕ МЕНЯТЬ !!!!
-#define ALRM_B      1   // НЕ МЕНЯТЬ !!!!
+#define ALRM_A      0   // РќР• РњР•РќРЇРўР¬ !!!!
+#define ALRM_B      1   // РќР• РњР•РќРЇРўР¬ !!!!
 
 typedef struct {
   uint8_t hour;
   uint8_t min;
   uint8_t sec;
-  uint8_t ss;     // Доля секунды = (PREDIV_S - SS) / (PREDIV_S + 1)
+  uint8_t ss;     // Р”РѕР»СЏ СЃРµРєСѓРЅРґС‹ = (PREDIV_S - SS) / (PREDIV_S + 1)
 } tTime;
 
 typedef struct {
@@ -40,7 +40,7 @@ typedef struct {
   uint8_t hour;
   uint8_t min;
   uint8_t sec;
-  uint8_t ss;     // Доля секунды = (PREDIV_S - SS) / (PREDIV_S + 1)
+  uint8_t ss;     // Р”РѕР»СЏ СЃРµРєСѓРЅРґС‹ = (PREDIV_S - SS) / (PREDIV_S + 1)
 } tRtc;
 
 #define TIMEZONE_MSK      (+3)
@@ -50,26 +50,27 @@ typedef struct {
   #define _XT_SIGNED
 
 #ifdef  _XT_SIGNED
-  typedef int32_t                           tXtime;
+  typedef int32_t                           tUxTime;
 #else
-  typedef uint32                          tXtime;
+  typedef uint32                          tUxTime;
 #endif
 
-extern volatile tXtime uxTime;
+extern volatile tUxTime uxTime;
 
 extern __IO uint32_t myTick;
 
-// *********** Инициализация структуры ВРЕМЯ (сейчас - системное ) ************
+// *********** РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЃС‚СЂСѓРєС‚СѓСЂС‹ Р’Р Р•РњРЇ (СЃРµР№С‡Р°СЃ - СЃРёСЃС‚РµРјРЅРѕРµ ) ************
+void rtcInit(void);
 void timeInit( void );
-// Получение системного мремени
+// РџРѕР»СѓС‡РµРЅРёРµ СЃРёСЃС‚РµРјРЅРѕРіРѕ РјСЂРµРјРµРЅРё
 uint32_t getTick( void );
-tXtime xtmtot( tDate *mdate, tTime *mtime );
-void xttotm( tDate * mdate, tTime *mtime, tXtime secsarg);
-void setRtcTime( tXtime xtime );
-tXtime getRtcTime( void );
+tUxTime xtmtot( tDate *mdate, tTime *mtime );
+void xttotm( tDate * mdate, tTime *mtime, tUxTime secsarg);
+void setRtcTime( tUxTime xtime );
+tUxTime getRtcTime( void );
 void timersProcess( void );
 
 void timersHandler( void );
-void myDelay( uint32_t del );
+void mDelay( uint32_t del );
 
 #endif /* UNIX_TIME_H_ */
