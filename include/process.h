@@ -10,5 +10,7 @@
 
 
 void mesureStart( void );
+inline void deepSleepOn( void );
+inline void deepSleepOff( void );
 
 #endif /* PROCESS_H_ */

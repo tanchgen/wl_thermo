@@ -9,6 +9,7 @@
 #include "stm32l0xx_ll_adc.h"
 
 #include "main.h"
+#include "process.h"
 #include "bat.h"
 
 /* ADC init function */
@@ -62,5 +63,7 @@ void batStart( void ){
   while( (PWR->CSR & PWR_CSR_VREFINTRDYF) == 0 )
   {}
   ADC1->CR |= ADC_CR_ADSTART;
+  // Выключаем режим DeepSleep - включаем Sleep
+  deepSleepOff();
 }
 

@@ -14,9 +14,10 @@
 
 #define ALARM_UPDATE_TOUT   100
 
-
 #define ALRM_A      0   // НЕ МЕНЯТЬ !!!!
 #define ALRM_B      1   // НЕ МЕНЯТЬ !!!!
+
+#define RTCCLOCK     32768
 
 typedef struct {
   uint8_t hour;

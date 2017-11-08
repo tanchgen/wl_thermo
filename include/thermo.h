@@ -24,6 +24,8 @@
 #define THERMO_R12      (uint8_t)0x60      // Маска точности 0.0625 гр.Ц (12 бит)
 #define THERMO_OS       (uint8_t)0x80      // Маска бита START One-Shot
 
+#define THERMO_ACCUR      9
+#define THERMO_REG_ACCUR  (((THERMO_ACCUR) - 9) << 5)
 
 //#define THERMO_START      0x02      // Значение CR - проснутся
 //#define THERMO_STOP      0x03      // Значение CR - уснуть

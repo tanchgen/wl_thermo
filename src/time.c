@@ -53,12 +53,21 @@ void rtcInit(void){
   RTC->CR &=~ RTC_CR_ALRAE;
   while((RTC->ISR & RTC_ISR_ALRAWF) != RTC_ISR_ALRAWF)
   {}
-
   RTC->ALRMAR = 0L;
   // Alarm A each 1day
   RTC->ALRMAR = RTC_ALRMAR_MSK4;
-
   RTC->CR = RTC_CR_ALRAIE | RTC_CR_ALRAE;
+
+  // --- Configure WakeUp Timer -----
+  RTC->CR &=~ RTC_CR_WUTE;
+  while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
+  {}
+  // частота = RTCCLOCK (32768кГц) / 2: T = ~61.05мкс
+  RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | RTC_CR_WUCKSEL_1 | RTC_CR_WUCKSEL_0;
+  RTC->CR = RTC_CR_WUTIE;
+  // Disable WUT
+  RTC->CR &= RTC_CR_WUTE;
+
   // Disable write access
   RTC->WPR = 0xFE;
   RTC->WPR = 0x64;
@@ -67,10 +76,14 @@ void rtcInit(void){
   EXTI->IMR |= EXTI_IMR_IM17;
   // Rising edge for line 17
   EXTI->RTSR |= EXTI_RTSR_TR17;
+
+  // Configure exti and nvic for RTC WakeUp-Timer IT
+  EXTI->IMR |= EXTI_IMR_IM20;
+  // Rising edge for line 20
+  EXTI->RTSR |= EXTI_RTSR_TR20;
+
   NVIC_SetPriority(RTC_IRQn, 0);
   NVIC_EnableIRQ(RTC_IRQn);
-
-
 }
 
 void timeInit( void ) {
@@ -237,7 +250,7 @@ void timersHandler( void ) {
     timerCount3--;
   }
 #endif
-  if ( !(myTick % 1000) ){
+  if ( !(mTick % 1000) ){
     secondFlag = SET;
   }
 }
@@ -266,7 +279,7 @@ void timersProcess( void ) {
 // Задержка в мс
 void mDelay( uint32_t del ){
   uint32_t finish = myTick + del;
-  while ( myTick < finish)
+  while ( mTick < finish)
   {}
 }
 
@@ -361,5 +374,16 @@ static void RTC_GetAlrm( tRtc * prtc, uint8_t alrm ){
   prtc->sec = BCD2BIN( *palrm );
 }
 
-
+void wutStop( void ){
+  // Write access for RTC registers
+    RTC->WPR = 0xCA;
+    RTC->WPR = 0x53;
+    // --- Configure WakeUp Timer -----
+    RTC->CR &=~ RTC_CR_WUTE;
+    while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
+    {}
+    // Disable write access
+    RTC->WPR = 0xFE;
+    RTC->WPR = 0x64;
+}
 

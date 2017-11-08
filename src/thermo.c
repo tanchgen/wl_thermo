@@ -66,7 +66,7 @@ void thermoInit( void ){
   i2cInit();
   // Настройки термодатчика
   buf[0] = THERMO_REG_CR;
-  buf[1] = ((uint8_t)~(THERMO_OS)) | THERMO_R09 | THERMO_SD;
+  buf[1] = ((uint8_t)~(THERMO_OS)) | THERMO_REG_ACCUR | THERMO_SD;
   thermoSend( buf );
 }
 

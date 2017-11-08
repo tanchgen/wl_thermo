@@ -129,8 +129,9 @@ void ADC1_COMP_IRQHandler(void){
   else {
     uint32_t vrefCal = *((uint16_t *)0x1FF80078);
     uint32_t vref = ADC1->DR;
-    sensData.bat = (uint32_t)((3000L * vrefCal)/vref);
-
+    // Пересчет: X (мВ) / 10 - 150 = Y * 0.01В. Например: 3600мВ = 210ед, 2000мВ = 50ед
+    sensData.bat = (uint8_t)(((3000L * vrefCal)/vref)/10 - 150);
+    deepSleepOn();
     flags.batCplt = TRUE;
     // Не пара ли передавать данные серверу?
     dataSendTry();
@@ -143,6 +144,11 @@ void ADC1_COMP_IRQHandler(void){
 */
 void RTC_IRQHandler(void){
   // TODO: Обработка прерывания от часов
+  if( RTC->ISR & RTC_ISR_WUTF ){
+    //Clear WUTF
+    RTC->ISR &= ~RTC_ISR_WUTF;
+    wutIrqHandler();
+  }
 }
 
 /**
