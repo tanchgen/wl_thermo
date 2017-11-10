@@ -63,6 +63,9 @@ void rfmRegWrite( uint8_t addr, uint8_t data ){
 }
 
 void rfmInit( void ){
+  // Иниализируем интерфейс SPI
+  spiInit();
+
   rfDataInit();
   // Настройка выходов DIO_RFM и прерывания от DIO0 и DIO4 (RSSI)
   dioInit();
@@ -93,7 +96,7 @@ void rfmFreqSet( uint32_t freq ){
   oldMode = rfmRegRead( REG_OPMODE ) & REG_OPMODE_MODE;
   if( (oldMode ) == REG_OPMODE_TX ){
     // Если в режиме TX - прерводим в режим RX
-    rfmSetOpmode_s( REG_OPMODE_RX );
+    rfmSetMode_s( REG_OPMODE_RX );
   }
   // Формируем буфер передачи (MSB)
 
@@ -105,27 +108,27 @@ void rfmFreqSet( uint32_t freq ){
 
   if( (oldMode ) == REG_OPMODE_RX ){
     // Если был в режиме RX - прерводим в режим FS
-    rfmSetOpmode_s( REG_OPMODE_FS );
+    rfmSetMode_s( REG_OPMODE_FS );
   }
 
-  rfmSetOpmode_s( oldMode );
+  rfmSetMode_s( oldMode );
   rfm.mode = oldMode >> 2;
 }
 
 
 // Переключение рабочего режима с блокировкой
-void rfmSetOpmode_s( uint8_t opMode ){
+void rfmSetMode_s( uint8_t mode ){
   uint8_t nowMode;
 
   nowMode = rfmRegRead( REG_OPMODE );
   nowMode &= (~REG_OPMODE_MODE);
-  nowMode |= opMode;
+  nowMode |= mode;
   rfmRegWrite( REG_OPMODE, nowMode );
 
   // Проверяем/ждем что режим включился
   while( (rfmRegRead(REG_IRQ_FLAG1) & REG_IF1_MODEREADY) == 0 )
   {}
-  rfm.mode = opMode >> 2;
+  rfm.mode = mode >> 2;
 }
 
 // Салибровка RC-генератора
@@ -176,7 +179,7 @@ void rfmTransmit( tPkt *pPkt ){
   // Переводим в режим передачи
   if( rfm.mode != MODE_TX ){
     // Переводим в режим TX-mode
-    rfmSetOpmode_s( REG_OPMODE_TX );
+    rfmSetMode_s( REG_OPMODE_TX );
   }
 }
 
@@ -214,7 +217,7 @@ uint8_t rfmReceive( tPkt * pkt ){
 
 void rfmRecvStop( void ){
   // Выключаем RFM69
-  rfmSetOpmode_s( REG_OPMODE_SLEEP );
+  rfmSetMode_s( REG_OPMODE_SLEEP );
   // Если в FIFO осталось что-то - в мусор...
   while( dioRead(DIO_RX_FIFONE) ){
     rfmRegRead( REG_FIFO );
@@ -255,69 +258,39 @@ static inline void dioInit( void ){
   RFM_RST_PORT->MODER = (RFM_RST_PORT->MODER &  ~(0x3<< (RFM_RST_PIN_NUM * 2))) |
                          (0x1<< (RFM_RST_PIN_NUM * 2));
 
-  //---- Инициализация выводов для DIO0 RFM69: вход, 2МГц, без подтяжки, EXTI
-  DIO0_PORT->OTYPER &= ~DIO0_PIN;
-  DIO0_PORT->OSPEEDR = (DIO0_PORT->OSPEEDR  & ~(0x3 << (DIO0_PIN_NUM * 2))) |
-                       (0x1<< (DIO0_PIN_NUM * 2));
-  DIO0_PORT->PUPDR &= ~(0x3<< (DIO0_PIN_NUM * 2));
-  DIO0_PORT->MODER &= ~(0x3 << (DIO0_PIN_NUM * 2));
-  // Инициализация прерывания от DIO0
-  // Select Port A for pin 0 extended interrupt by writing 0000 in EXTI0
-  SYSCFG->EXTICR[DIO0_PIN_NUM / 4] &= (uint16_t)~(DIO0_PORT_NUM << (DIO0_PIN_NUM * 4));
+
+  //---- Инициализация выводов для DIO0 - DIO5 RFM69: вход, 2МГц, без подтяжки
+
+  //Dio0 - PA0, Dio1 - PA1, Dio2 - PA2, Dio3 - PA3, Dio4 - PA6
+  GPIOA->OTYPER &= ~(GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_6);
+  GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~(0x3 | (0x3 << (1 * 2)) | (0x3 << (2 * 2)) | (0x3 << (3 * 2)) | (0x3 << (6 * 2)) )) |
+        (0x1 | (0x1 << (1 * 2)) | (0x1 << (2 * 2)) | (0x1 << (3 * 2)) | (0x1 << (6 * 2)) );
+  GPIOA->PUPDR &= ~(0x3 | (0x3 << (1 * 2)) | (0x3 << (2 * 2)) | (0x3 << (3 * 2)) | (0x3 << (6 * 2)) );
+  GPIOA->MODER &= ~(0x3 | (0x3 << (1 * 2)) | (0x3 << (2 * 2)) | (0x3 << (3 * 2)) | (0x3 << (6 * 2)) );
+
+  // Dio5 - PB2
+  GPIOA->OTYPER &= ~(GPIO_Pin_2);
+  GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~(0x3 << (2 * 2))) | (0x1 << (2 * 2));
+  GPIOA->PUPDR &= ~(0x3 << (1 * 2));
+  GPIOA->MODER &= ~(0x3 << (1 * 2));
+
+  // Инициализация прерывания от DIO0 и DI03
+  // Select Dio0-Port for Dio0-Pin extended interrupt by writing 0000 in EXTI0
+  SYSCFG->EXTICR[DIO0_PIN_NUM / 4] &= (uint16_t)~(0xF << (DIO0_PIN_NUM * 4));
+  // Select Dio0-Port for Dio0-Pin extended interrupt by writing 0000 in EXTI0
+  SYSCFG->EXTICR[DIO3_PIN_NUM / 4] &= (uint16_t)~(0xF << (DIO3_PIN_NUM * 4));
+  SYSCFG->EXTICR[DIO3_PIN_NUM / 4] |= (uint16_t)( DIO3_PORT_NUM << (DIO3_PIN_NUM * 4) );
+
   // Configure the corresponding mask bit in the EXTI_IMR register
-  EXTI->IMR |= DIO0_PIN;
+  EXTI->IMR |= (DIO0_PIN | DIO3_PIN );
   // Configure the Trigger Selection bits of the Interrupt line on rising edge
-  EXTI->RTSR |= DIO0_PIN;
+  EXTI->RTSR |= (DIO0_PIN | DIO3_PIN );
   // ----------- Configure NVIC for Extended Interrupt --------
-  // Enable Interrupt on EXTI0_1
-  // Set priority for EXTI0_1
   NVIC_EnableIRQ( DIO0_EXTI_IRQn );
   NVIC_SetPriority( DIO0_EXTI_IRQn, 0 );
 
-  //---- Инициализация выводов для DIO4 RFM69: вход, 2МГц, без подтяжки, EXTI
-  DIO4_PORT->OTYPER &= ~DIO4_PIN;
-  DIO4_PORT->OSPEEDR = (DIO4_PORT->OSPEEDR  & ~(0x3 << (DIO4_PIN_NUM * 2))) |
-                       (0x1<< (DIO4_PIN_NUM * 2));
-  DIO4_PORT->PUPDR &= ~(0x3<< (DIO4_PIN_NUM * 2));
-  DIO4_PORT->MODER &= ~(0x3 << (DIO4_PIN_NUM * 2));
-  // Инициализация прерывания от DIO4
-  // Select Port A for pin 0 extended interrupt by writing 0000 in EXTI0
-  SYSCFG->EXTICR[DIO4_PIN_NUM / 4] &= (uint16_t)~(DIO4_PORT_NUM << (DIO4_PIN_NUM * 4));
-  // Configure the corresponding mask bit in the EXTI_IMR register
-  EXTI->IMR |= DIO4_PIN;
-  // Configure the Trigger Selection bits of the Interrupt line on rising edge
-  EXTI->RTSR |= DIO4_PIN;
-  // ----------- Configure NVIC for Extended Interrupt --------
-  // Enable Interrupt on EXTI0_1
-  // Set priority for EXTI0_1
-  NVIC_EnableIRQ( DIO4_EXTI_IRQn );
-  NVIC_SetPriority( DIO4_EXTI_IRQn, 0 );
-
-
-  //---- Инициализация выводов для DIO1 - DIO3, DIO5 RFM69: вход, 2МГц, без подтяжки
-  DIO1_PORT->OTYPER &= ~DIO1_PIN;
-  DIO1_PORT->OSPEEDR = (DIO1_PORT->OSPEEDR  & ~(0x3 << (DIO1_PIN_NUM * 2))) |
-                       (0x1<< (DIO1_PIN_NUM * 2));
-  DIO1_PORT->PUPDR &= ~(0x3<< (DIO1_PIN_NUM * 2));
-  DIO1_PORT->MODER &= ~(0x3 << (DIO1_PIN_NUM * 2));
-
-  DIO2_PORT->OTYPER &= ~DIO2_PIN;
-  DIO2_PORT->OSPEEDR = (DIO2_PORT->OSPEEDR  & ~(0x3 << (DIO2_PIN_NUM * 2))) |
-                       (0x1<< (DIO2_PIN_NUM * 2));
-  DIO2_PORT->PUPDR &= ~(0x3<< (DIO2_PIN_NUM * 2));
-  DIO2_PORT->MODER &= ~(0x3 << (DIO2_PIN_NUM * 2));
-
-  DIO3_PORT->OTYPER &= ~DIO3_PIN;
-  DIO3_PORT->OSPEEDR = (DIO3_PORT->OSPEEDR  & ~(0x3 << (DIO3_PIN_NUM * 2))) |
-                       (0x1<< (DIO3_PIN_NUM * 2));
-  DIO3_PORT->PUPDR &= ~(0x3<< (DIO3_PIN_NUM * 2));
-  DIO3_PORT->MODER &= ~(0x3 << (DIO3_PIN_NUM * 2));
-
-  DIO5_PORT->OTYPER &= ~DIO5_PIN;
-  DIO5_PORT->OSPEEDR = (DIO5_PORT->OSPEEDR  & ~(0x3 << (DIO5_PIN_NUM * 2))) |
-                       (0x1<< (DIO5_PIN_NUM * 2));
-  DIO5_PORT->PUPDR &= ~(0x3<< (DIO5_PIN_NUM * 2));
-  DIO5_PORT->MODER &= ~(0x3 << (DIO5_PIN_NUM * 2));
+  NVIC_EnableIRQ( DIO3_EXTI_IRQn );
+  NVIC_SetPriority( DIO3_EXTI_IRQn, 0 );
 
 }
 
@@ -343,7 +316,7 @@ static inline void rfDataInit( void ){
 }
 
 static inline void rfmRegSetup( void ){
-  rfmSetOpmode_s( REG_OPMODE_STDBY );
+  rfmSetMode_s( REG_OPMODE_STDBY );
   // Калибровка RC-генратора
   rfmRcCal();
   // Настройка bitrate
@@ -373,10 +346,11 @@ static inline void rfmRegSetup( void ){
   // DIO0 - 0b00  // RX- CrcOk, TX- PacketSent
   // DIO1 - 0b01  // RX- FifoFull, TX- FifoFull
   // DIO2 - 0b00  // RX- FifoNotEmpty, TX- FifoNotEmpty
-  // DIO3 - 0b10  // RX- SyncAddr, TX - ----
-  // DIO4 - 0b10  // RX- RxReady, TX - ----
+  // // DIO3 - 0b10  // RX- SyncAddr, TX - ----
+  // DIO3 - 0b01  // RX- RSSI, TX - ----
+  // DIO4 - 0b01  // RX- RSSI, TX - ----
   // DIO5 - 0b00  // RX- ClkOut, TX - ClkOut
-  rfmRegWrite( REG_DIO_MAP1, 0x12 );
+  rfmRegWrite( REG_DIO_MAP1, 0x11 );
   rfmRegWrite( REG_DIO_MAP2, 0x47 );
   // Настройка Sync-последовательности: Sync(NetID - вкл), 2 байта, (Net ID = 0x0101)
   rfmRegWrite( REG_SYNC1, (uint8_t)(rfm.netId >> 8) );

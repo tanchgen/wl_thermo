@@ -85,6 +85,7 @@ uint8_t thermoRead( void ){
   if( flags.thermoErr == 0){
     sensData.temp = thermoRcv();
   }
+  flags.thermCplt = SET;
   state = STAT_T_CPLT;
 
   return flags.thermoErr;
@@ -106,8 +107,8 @@ static inline int16_t thermoRcv( void ){
 
   // Передаем 1 байт без автостопа
   I2C1->CR2 = (I2C1->CR2 & ~(I2C_CR2_NBYTES | I2C_CR2_RD_WRN  | I2C_CR2_AUTOEND) ) | (1 << 16);
-
-  I2C2->TXDR = 0x00; // 1-st Byte to send
+  // 1-st Byte - Temperature register address to send
+  I2C2->TXDR = 0x00;
   I2C2->CR2 |= I2C_CR2_START; // Go
   // Подтверждение приемки адреса ведомым
   while( (I2C1->ISR & I2C_ISR_NACKF) == 0 ){
@@ -141,7 +142,7 @@ static inline int16_t thermoRcv( void ){
         return 0xFF00;
       }
     }
-    rc.u8t[i] = I2C2->RXDR; // 1-st Byte reseived
+    rc.u8t[i] = I2C2->RXDR; // Data Byte (MSB and LSB temperature) reseived
   }
   // Ждем окончания приема
   tout = mTick + I2C_TOUT;

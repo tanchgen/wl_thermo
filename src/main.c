@@ -35,6 +35,8 @@
 #include "bat.h"
 #include "thermo.h"
 #include "spi.h"
+#include "rfm69.h"
+#include "process.h"
 #include "main.h"
 
 volatile uint32_t mTick;
@@ -78,11 +80,10 @@ int main(int argc, char* argv[])
   eepromUnlock();
 
   /* Initialize all configured peripherals */
-  adcInit();
+  batInit();
   thermoInit();
-  spiInit();
-  rtcInit();
   rfmInit();
+  timeInit();
 
   // Запустили измерения
   mesureStart();

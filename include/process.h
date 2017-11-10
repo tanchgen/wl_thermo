@@ -8,9 +8,24 @@
 #ifndef PROCESS_H_
 #define PROCESS_H_
 
+#include "stm32l0xx.h"
+
+
+extern volatile tUxTime sendTryStopTime;
 
 void mesureStart( void );
-inline void deepSleepOn( void );
-inline void deepSleepOff( void );
+void wutIrqHandler( void );
+int8_t dataSendTry( void );
+
+
+inline void deepSleepOn( void ){
+  // STOP mode (SLEEPDEEP) enable
+  SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+}
+inline void deepSleepOff( void ){
+  // STOP mode (SLEEPDEEP) disable
+  SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+}
+
 
 #endif /* PROCESS_H_ */

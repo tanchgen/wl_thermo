@@ -8,6 +8,8 @@
 #ifndef INCLUDE_STM32L0XX_LL_GPIO_H_
 #define INCLUDE_STM32L0XX_LL_GPIO_H_
 
+#include "stm32l0xx.h"
+
 #define GPIO_Pin_0                      GPIO_BSRR_BS_0 /*!< Select pin 0 */
 #define GPIO_Pin_1                      GPIO_BSRR_BS_1 /*!< Select pin 1 */
 #define GPIO_Pin_2                      GPIO_BSRR_BS_2 /*!< Select pin 2 */

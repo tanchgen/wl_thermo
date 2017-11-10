@@ -35,7 +35,8 @@
 
 #include "thermo.h"
 #include "main.h"
-
+#include "process.h"
+#include "rfm69.h"
 #include "stm32l0xx_it.h"
 
 /* External variables --------------------------------------------------------*/
@@ -145,9 +146,17 @@ void ADC1_COMP_IRQHandler(void){
 void RTC_IRQHandler(void){
   // TODO: Обработка прерывания от часов
   if( RTC->ISR & RTC_ISR_WUTF ){
+    // Wake-Up timer interrupt
     //Clear WUTF
     RTC->ISR &= ~RTC_ISR_WUTF;
     wutIrqHandler();
+  }
+  if( RTC->ISR & RTC_ISR_ALRAF ){
+    // Alarm A interrupt
+    //Clear ALRAF
+    RTC->ISR &= ~RTC_ISR_ALRAF;
+    uxTime = getRtcTime();
+    mesureStart();
   }
 }
 
@@ -158,6 +167,23 @@ void EXTI0_1_IRQHandler(void)
 {
   // TODO: Обработка прерывания от RFM-69: Dio0
 }
+
+// Прерывание по PA3 - DIO3 RSSI
+// Канал кем-то занят
+void EXTI2_3_IRQHandler( void ){
+  uint32_t timeNow;
+
+  EXTI->PR |= DIO3_PIN;
+  // Канал занят - Выжидаем паузу 30мс + x * 20мс
+  timeNow = getRtcTime();
+  if( timeNow > sendTryStopTime ){
+    // Время на попытки отправить данные вышло - все бросаем до следующего раза
+    return;
+  }
+  // Можно еще попытатся - выждем паузу
+
+}
+
 
 /**
 * @brief This function handles I2C1 event global interrupt / I2C1 wake-up interrupt through EXTI line 23.

@@ -36,12 +36,12 @@
 #define DIO3_PIN        GPIO_Pin_3
 #define DIO3_PIN_NUM    3
 #define DIO3_PORT       GPIOA
+#define DIO3_PORT_NUM   0
+#define DIO3_EXTI_IRQn  EXTI2_3_IRQn
 
 #define DIO4_PIN        GPIO_Pin_6
 #define DIO4_PIN_NUM    6
 #define DIO4_PORT       GPIOA
-#define DIO4_PORT_NUM   0
-#define DIO4_EXTI_IRQn  EXTI4_15_IRQn
 
 #define DIO5_PIN        GPIO_Pin_2
 #define DIO5_PIN_NUM    2

@@ -7,6 +7,7 @@
 
 #include "stm32l0xx.h"
 
+#include "main.h"
 #include "my_time.h"
 
 #define BIN2BCD(__VALUE__) (uint8_t)((((__VALUE__) / 10U) << 4U) | ((__VALUE__) % 10U))
@@ -53,9 +54,10 @@ void rtcInit(void){
   RTC->CR &=~ RTC_CR_ALRAE;
   while((RTC->ISR & RTC_ISR_ALRAWF) != RTC_ISR_ALRAWF)
   {}
-  RTC->ALRMAR = 0L;
-  // Alarm A each 1day
-  RTC->ALRMAR = RTC_ALRMAR_MSK4;
+  // Устанавливаем секунды в будильник - разбиваем все ноды на 60 групп
+  RTC->ALRMAR = (uint32_t)(BCD2BIN(rfm.nodeAddr % 60));
+  // Alarm A every day, every hour, every minute
+  RTC->ALRMAR = RTC_ALRMAR_MSK4 | RTC_ALRMAR_MSK3 | RTC_ALRMAR_MSK2;
   RTC->CR = RTC_CR_ALRAIE | RTC_CR_ALRAE;
 
   // --- Configure WakeUp Timer -----
@@ -87,6 +89,8 @@ void rtcInit(void){
 }
 
 void timeInit( void ) {
+  //Инициализируем RTC
+  rtcInit();
 
   /*##-1- Configure the Date #################################################*/
   /* Set Date: Wednesday June 1st 2016 */
@@ -94,9 +98,9 @@ void timeInit( void ) {
   rtc.month = 12;
   rtc.date = 15;
   rtc.wday = 5;
-  rtc.hour = 11;
-  rtc.min = 40;
-  rtc.sec = 0;
+  rtc.hour = 12;
+  rtc.min = 0;
+  rtc.sec = BCD2BIN(rfm.nodeAddr % 60) + 1;
   rtc.ss = 0;
 
 
@@ -208,6 +212,13 @@ tUxTime getRtcTime( void ){
   return xTm2Utime( &rtc );
 }
 
+uint8_t getRtcMin( void ){
+  if((RTC->ISR & RTC_ISR_RSF) == 0){
+    return 61;
+  }
+  return BCD2BIN( RTC->TR >> RTC_POSITION_TR_MU );
+}
+
 /* Установка будильника
  *  xtime - UNIX-времени
  *  alrm - номере будильника
@@ -228,10 +239,6 @@ tUxTime getAlrm( uint8_t alrm ){
 
   RTC_GetAlrm( &tmpRtc, alrm );
   return xTm2Utime( &tmpRtc );
-}
-
-void setWkup( void ){
-
 }
 
 void timersHandler( void ) {
@@ -278,7 +285,7 @@ void timersProcess( void ) {
 
 // Задержка в мс
 void mDelay( uint32_t del ){
-  uint32_t finish = myTick + del;
+  uint32_t finish = mTick + del;
   while ( mTick < finish)
   {}
 }
@@ -326,10 +333,10 @@ static void RTC_GetTime( volatile tRtc * prtc ){
   if((RTC->ISR & RTC_ISR_RSF) == 0){
     return;
   }
-    prtc->hour = BCD2BIN( RTC->TR >> RTC_POSITION_TR_HU );
-    prtc->min = BCD2BIN( RTC->TR >> RTC_POSITION_TR_MU );
-    prtc->sec = BCD2BIN( RTC->TR );
-    prtc->ss = RTC->SSR;
+  prtc->hour = BCD2BIN( RTC->TR >> RTC_POSITION_TR_HU );
+  prtc->min = BCD2BIN( RTC->TR >> RTC_POSITION_TR_MU );
+  prtc->sec = BCD2BIN( RTC->TR );
+  prtc->ss = RTC->SSR;
 }
 
 static void RTC_GetDate( volatile tRtc * prtc ){
@@ -385,5 +392,28 @@ void wutStop( void ){
     // Disable write access
     RTC->WPR = 0xFE;
     RTC->WPR = 0x64;
+}
+
+/* Установка и запуск wakeup-таймера
+ * mc - время в мс.
+ */
+void wutSet( uint16_t ms ){
+
+  // Вычисляем значение таймера: wukt = (ms * (RTCCLOCK / 2) + 500)/1000
+  uint16_t  wukt = (ms * (RTCCLOCK / 2) + 500)/1000;
+
+  // Если wukt == 0: просто останавливаем WUT
+  RTC->WPR = 0xCA;
+  RTC->WPR = 0x53;
+  RTC->CR &=~ RTC_CR_WUTE;
+  while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
+  {}
+  if( wukt != 0 ){
+    wukt--;
+    RTC->WUTR = wukt;
+    RTC->CR |= RTC_CR_WUTE;
+  }
+  RTC->WPR = 0xFE;
+  RTC->WPR = 0x64;
 }
 

@@ -12,8 +12,8 @@
 #include "process.h"
 #include "bat.h"
 
-/* ADC init function */
-void adcInit(void){
+// Batary volt sensor init function
+void batInit(void){
 
   // Вкл тактирование АЦП
   RCC->APB2ENR |= RCC_APB2ENR_ADC1EN | RCC_APB2ENR_SYSCFGEN;

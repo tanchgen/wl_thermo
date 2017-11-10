@@ -74,4 +74,8 @@ void timersProcess( void );
 void timersHandler( void );
 void mDelay( uint32_t del );
 
+void wutStop( void );
+void wutSet( uint16_t ms );
+
+
 #endif /* UNIX_TIME_H_ */
