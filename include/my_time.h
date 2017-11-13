@@ -56,6 +56,7 @@ typedef struct {
   typedef uint32                          tUxTime;
 #endif
 
+extern volatile tRtc rtc;
 extern volatile tUxTime uxTime;
 
 extern __IO uint32_t myTick;
@@ -65,17 +66,19 @@ void rtcInit(void);
 void timeInit( void );
 // Получение системного мремени
 uint32_t getTick( void );
-tUxTime xtmtot( tDate *mdate, tTime *mtime );
-void xttotm( tDate * mdate, tTime *mtime, tUxTime secsarg);
-void setRtcTime( tUxTime xtime );
-tUxTime getRtcTime( void );
+tUxTime xTm2Utime( volatile tRtc * prtc );
+
 void timersProcess( void );
 
 void timersHandler( void );
 void mDelay( uint32_t del );
 
+void setRtcTime( tUxTime xtime );
+tUxTime getRtcTime( void );
+void setAlrm( tUxTime xtime, uint8_t alrm );
+void correctAlrm( uint8_t alrm );
 void wutStop( void );
-void wutSet( uint16_t ms );
+void wutSet( uint32_t us );
 
 
 #endif /* UNIX_TIME_H_ */

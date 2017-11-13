@@ -8,6 +8,7 @@
 #include "stm32l0xx.h"
 
 #include "main.h"
+#include "rfm69.h"
 #include "my_time.h"
 
 #define BIN2BCD(__VALUE__) (uint8_t)((((__VALUE__) / 10U) << 4U) | ((__VALUE__) % 10U))
@@ -23,6 +24,7 @@ static void RTC_SetDate( volatile tRtc * prtc );
 static void RTC_GetDate( volatile tRtc * prtc );
 static void RTC_SetAlrm( tRtc * prtc, uint8_t alrm );
 static void RTC_GetAlrm( tRtc * prtc, uint8_t alrm );
+static void RTC_CorrAlrm( tRtc * prtc, uint8_t alrm );
 
 // *********** Инициализация структуры ВРЕМЯ (сейчас - системное ) ************
 void rtcInit(void){
@@ -42,31 +44,30 @@ void rtcInit(void){
 
   // --- Configure Clock Prescaler -----
   // Enable init phase
-  RTC->ISR = RTC_ISR_INIT;
+  RTC->ISR |= RTC_ISR_INIT;
   while((RTC->ISR & RTC_ISR_INITF)!=RTC_ISR_INITF)
   {}
   // RTCCLOCK deviser
   RTC->PRER = 0x007F00FF;
-  RTC->ISR =~ RTC_ISR_INIT;
+  RTC->ISR &= ~RTC_ISR_INIT;
 
   // --- Configure Alarm A -----
   // Disable alarm A to modify it
-  RTC->CR &=~ RTC_CR_ALRAE;
+  RTC->CR &= ~RTC_CR_ALRAE;
   while((RTC->ISR & RTC_ISR_ALRAWF) != RTC_ISR_ALRAWF)
   {}
   // Устанавливаем секунды в будильник - разбиваем все ноды на 60 групп
   RTC->ALRMAR = (uint32_t)(BCD2BIN(rfm.nodeAddr % 60));
   // Alarm A every day, every hour, every minute
   RTC->ALRMAR = RTC_ALRMAR_MSK4 | RTC_ALRMAR_MSK3 | RTC_ALRMAR_MSK2;
-  RTC->CR = RTC_CR_ALRAIE | RTC_CR_ALRAE;
+  RTC->CR |= RTC_CR_ALRAIE | RTC_CR_ALRAE;
 
   // --- Configure WakeUp Timer -----
-  RTC->CR &=~ RTC_CR_WUTE;
+  RTC->CR &= ~RTC_CR_WUTE;
   while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
   {}
   // частота = RTCCLOCK (32768кГц) / 2: T = ~61.05мкс
-  RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | RTC_CR_WUCKSEL_1 | RTC_CR_WUCKSEL_0;
-  RTC->CR = RTC_CR_WUTIE;
+  RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | RTC_CR_WUCKSEL_1 | RTC_CR_WUCKSEL_0 | RTC_CR_WUTIE;
   // Disable WUT
   RTC->CR &= RTC_CR_WUTE;
 
@@ -100,12 +101,16 @@ void timeInit( void ) {
   rtc.wday = 5;
   rtc.hour = 12;
   rtc.min = 0;
-  rtc.sec = BCD2BIN(rfm.nodeAddr % 60) + 1;
+  rtc.sec = 0;;
   rtc.ss = 0;
 
 
   RTC_SetDate( &rtc );
   RTC_SetTime( &rtc );
+  // Выставляем будильник для измерения температуры
+  rtc.sec = BCD2BIN(rfm.nodeAddr % 60) + 1;
+  uxTime = xTm2Utime( &rtc );
+  setAlrm( uxTime, ALRM_A );
 
 }
 
@@ -241,6 +246,20 @@ tUxTime getAlrm( uint8_t alrm ){
   return xTm2Utime( &tmpRtc );
 }
 
+/* Коррекция будильника в соответствии с реалиями занятости канала:
+ * В следующий раз будем пробовать отправлять данные именно в это значение секунд,
+ * раз именно сейчас канал свободен.
+ */
+void correctAlrm( uint8_t alrm ){
+  tRtc tmpRtc;
+
+  // Получим текущее время, заодно обновим глобальное значение
+  uxTime = getRtcTime();
+  xUtime2Tm( &tmpRtc, uxTime);
+  RTC_CorrAlrm( &tmpRtc, alrm );
+}
+
+
 void timersHandler( void ) {
 
 #if 0
@@ -295,7 +314,7 @@ static void RTC_SetTime( volatile tRtc * prtc ){
 
   RTC->WPR = 0xCA;
   RTC->WPR = 0x53;
-  RTC->ISR = RTC_ISR_INIT;
+  RTC->ISR |= RTC_ISR_INIT;
   while((RTC->ISR & RTC_ISR_INITF)!=RTC_ISR_INITF)
   {}
 
@@ -304,7 +323,7 @@ static void RTC_SetTime( volatile tRtc * prtc ){
           BIN2BCD( prtc->sec ) );
   RTC->TR = ( RTC->TR & (RTC_TR_PM | RTC_TR_HT | RTC_TR_HU | RTC_TR_MNT | RTC_TR_MNU | RTC_TR_ST | RTC_TR_SU)) | temp;
 
-  RTC->ISR =~ RTC_ISR_INIT;
+  RTC->ISR &= ~RTC_ISR_INIT;
   RTC->WPR = 0xFE;
   RTC->WPR = 0x64;
 }
@@ -314,7 +333,7 @@ static void RTC_SetDate( volatile tRtc * prtc ){
 
   RTC->WPR = 0xCA;
   RTC->WPR = 0x53;
-  RTC->ISR = RTC_ISR_INIT;
+  RTC->ISR |= RTC_ISR_INIT;
   while((RTC->ISR & RTC_ISR_INITF)!=RTC_ISR_INITF)
   {}
 
@@ -324,7 +343,7 @@ static void RTC_SetDate( volatile tRtc * prtc ){
           BIN2BCD( prtc->wday ) << RTC_POSITION_DR_WDU );
   RTC->DR = ( RTC->DR & (RTC_DR_YT | RTC_DR_YU | RTC_DR_MT | RTC_DR_MU | RTC_DR_DT | RTC_DR_DU | RTC_DR_WDU)) | temp;
 
-  RTC->ISR =~ RTC_ISR_INIT;
+  RTC->ISR &= ~RTC_ISR_INIT;
   RTC->WPR = 0xFE;
   RTC->WPR = 0x64;
 }
@@ -356,7 +375,7 @@ static void RTC_SetAlrm( tRtc * prtc, uint8_t alrm ){
 
   RTC->WPR = 0xCA;
   RTC->WPR = 0x53;
-  RTC->ISR = RTC_ISR_INIT;
+  RTC->ISR |= RTC_ISR_INIT;
   while((RTC->ISR & RTC_ISR_INITF)!=RTC_ISR_INITF)
   {}
 
@@ -366,7 +385,7 @@ static void RTC_SetAlrm( tRtc * prtc, uint8_t alrm ){
           BIN2BCD( prtc->sec ) );
   *palrm = ( *palrm & (RTC_ALRMAR_PM | RTC_ALRMAR_DT | RTC_ALRMAR_DU | RTC_ALRMAR_HT | RTC_ALRMAR_HU | RTC_ALRMAR_MNT | RTC_ALRMAR_MNU | RTC_ALRMAR_ST | RTC_ALRMAR_SU)) | temp;
 
-  RTC->ISR =~ RTC_ISR_INIT;
+  RTC->ISR &= ~RTC_ISR_INIT;
   RTC->WPR = 0xFE;
   RTC->WPR = 0x64;
 }
@@ -379,6 +398,25 @@ static void RTC_GetAlrm( tRtc * prtc, uint8_t alrm ){
   prtc->hour = BCD2BIN( *palrm >> RTC_POSITION_ALMA_HU );
   prtc->min = BCD2BIN( *palrm >> RTC_POSITION_ALMA_MU );
   prtc->sec = BCD2BIN( *palrm );
+}
+
+static void RTC_CorrAlrm( tRtc * prtc, uint8_t alrm ){
+  register uint32_t temp = 0U;
+  // Если alrm = 0 (ALRM_A) : ALRMAR, есди alrm = 1 (ALRM_B) : ALRMBR
+  register uint32_t * palrm = (uint32_t *)&(RTC->ALRMAR) + alrm;
+
+  RTC->WPR = 0xCA;
+  RTC->WPR = 0x53;
+  RTC->ISR |= RTC_ISR_INIT;
+  while((RTC->ISR & RTC_ISR_INITF)!=RTC_ISR_INITF)
+  {}
+
+  temp = BIN2BCD( prtc->sec );
+  *palrm = ( *palrm & (RTC_ALRMAR_ST | RTC_ALRMAR_SU)) | temp;
+
+  RTC->ISR &= ~RTC_ISR_INIT;
+  RTC->WPR = 0xFE;
+  RTC->WPR = 0x64;
 }
 
 void wutStop( void ){
@@ -395,21 +433,23 @@ void wutStop( void ){
 }
 
 /* Установка и запуск wakeup-таймера
- * mc - время в мс.
+ * us - время в мкс.
  */
-void wutSet( uint16_t ms ){
-
-  // Вычисляем значение таймера: wukt = (ms * (RTCCLOCK / 2) + 500)/1000
-  uint16_t  wukt = (ms * (RTCCLOCK / 2) + 500)/1000;
+void wutSet( uint32_t us ){
 
   // Если wukt == 0: просто останавливаем WUT
   RTC->WPR = 0xCA;
   RTC->WPR = 0x53;
-  RTC->CR &=~ RTC_CR_WUTE;
+  RTC->CR &= ~RTC_CR_WUTE;
   while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
   {}
-  if( wukt != 0 ){
-    wukt--;
+  if( us != 0 ){
+    // Вычисляем значение таймера: wukt = (us * (RTCCLOCK / 2))/1000000 + 1
+    // Максимальная погрешность = + 61мкс (при 32768кГц)
+    uint16_t  wukt = (us * (RTCCLOCK / 2) )/1000000L;
+    if(wukt == 0){
+      wukt++;
+    }
     RTC->WUTR = wukt;
     RTC->CR |= RTC_CR_WUTE;
   }

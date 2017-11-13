@@ -9,6 +9,7 @@
 #define PROCESS_H_
 
 #include "stm32l0xx.h"
+#include "my_time.h"
 
 
 extern volatile tUxTime sendTryStopTime;
@@ -16,7 +17,8 @@ extern volatile tUxTime sendTryStopTime;
 void mesureStart( void );
 void wutIrqHandler( void );
 int8_t dataSendTry( void );
-
+void csmaRun( void );
+void csmaPause( void );
 
 inline void deepSleepOn( void ){
   // STOP mode (SLEEPDEEP) enable

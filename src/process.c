@@ -16,6 +16,9 @@
 #include "process.h"
 
 volatile tUxTime sendTryStopTime;
+static uint8_t msgNum;      // Порядковый номер отправляемого пакета
+
+static void sensDataSend( void );
 
 void mesureStart( void ){
   // Запускаем измерение напряжения батареи
@@ -37,6 +40,17 @@ void wutIrqHandler( void ){
     case STAT_T_READ:
       // Не пара ли передавать данные серверу?
       dataSendTry();
+      break;
+    case STAT_RF_CSMA_START:
+      // Канал свободен - отправляем сообщение
+      // Отправить сообщение
+      correctAlrm( ALRM_A );
+      sensDataSend();
+
+      break;
+    case STAT_RF_CSMA_PAUSE:
+      // Пробуем еще раз проверить частоту канала
+      csmaRun();
       break;
     default:
       break;
@@ -68,9 +82,47 @@ int8_t dataSendTry( void ){
   return rc;
 }
 
+
+// Начинаем слушат эфир на предмет свободности канала
 void csmaRun( void ){
   state = STAT_RF_CSMA_START;
   rfmSetMode_s( REG_OPMODE_RX );
   // Будем слушать эфир в течение 20 мс
-  setWut( 20 );
+  wutSet( TX_DURAT );
+}
+
+// Устанавливааем паузу случайной длительности (30-150 мс) в прослушивании канала на предмет тишины
+void csmaPause( void ){
+  uint32_t pause;
+  // Включаем генератор случайных чисел
+  RCC->AHBENR |= RCC_AHBENR_RNGEN;
+  RNG->CR |= RNG_CR_RNGEN;
+  // Ждем готовности числа (~ 46 тактов)
+  while( ((RNG->SR & RNG_SR_DRDY) == 0 ) &&
+          ((RNG->SR & RNG_SR_CEIS) == 0 ) &&
+          ((RNG->SR & RNG_SR_SEIS) == 0) ){
+  }
+  // Число RND готово или ошибка (тогда RND = 0)
+  pause = RNG->DR;
+  RCC->AHBENR &= ~RCC_AHBENR_RNGEN;
+  // Длительность паузы
+  pause = ((pause * 6) / (~(0L)) + 1) * TX_DURAT ;
+  wutSet( pause );
+  state = STAT_RF_CSMA_PAUSE;
+}
+
+static void sensDataSend( void ){
+  // ---- Формируем пакет данных -----
+  pkt.paySrcNode = rfm.nodeAddr;
+  pkt.payMsgNum = msgNum++;
+  pkt.payBat = sensData.bat;
+  pkt.payTerm = sensData.temp;
+
+  // Передаем заполненую при измерении запись
+  pkt.nodeAddr = BCRT_ADDR;
+  // Длина payload = 1(nodeAddr) + 1(msgNum) + 1(bat) + 2(temp)
+  pkt.payLen = 5;
+
+  rfmTransmit( &pkt );
+
 }

@@ -77,7 +77,7 @@ void thermoStart( void ){
   buf[0] = THERMO_REG_CR;
   buf[1] = THERMO_OS | THERMO_R09 | THERMO_SD;
   thermoSend( buf );
-// TODO: Уснуть на время преобразования мс: 27.5 - 9бит, 55 - 10бит, 110 - 11бит, 220 - 12бит
+// Уснуть на время преобразования мс: 27.5 - 9бит, 55 - 10бит, 110 - 11бит, 220 - 12бит
   state = STAT_T_MESUR;
 }
 

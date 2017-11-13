@@ -124,7 +124,7 @@
 #define REG_OPMODE_LISTEN_ABR 0x20    // Прерывание режима прослушивания ( запись 1 - прервать )
 #define REG_OPMODE_MODE       0x1C    // Маска флагов режима работы
 #define REG_OPMODE_SLEEP      0x00    // Sleep-mode
-#define REG_OPMODE_STDBY      0x04    // Stendby - режим
+#define REG_OPMODE_STDBY      0x04    // Standby - режим
 #define REG_OPMODE_FS         0x08    // FS-режим
 #define REG_OPMODE_TX         0x0C    // TX-режим
 #define REG_OPMODE_RX         0x10    // RX-режим
@@ -180,10 +180,21 @@
 #define CHANN39_NULL_FREQ   (433050000L) // Начальная частота "нулевого" канала 433Мгц
 #define CHAN39_MAX        39
 
+#define RF_BAUDRATE       9600
+#define RF_BR_MSB         (uint8_t)((((32000000UL << 1) / (RF_BAUDRATE) + 1) >> 1) >> 8)
+#define RF_BR_LSB         (uint8_t)(((32000000UL << 1) / RF_BAUDRATE + 1) >> 1)
+
+/* Длитетельность передачи одного пакета:
+ * 3байт - Преабула, 2байт - Sync, 1байт - Len, 1байт - nodeAddr, 1байт - msgNum, 1байт - battery, 1байт - temp
+ * (11байт = 654мкс, при 19200 бод, 1253мкс, при 9600 бод)
+ */
+#define TX_DURAT 654
+
 // Диапазон номеров каналов: 0 - 7  (433050 кГц - 433925 кГц)
 #define CHANN8_FREQ_STEP   (100000L)    // Разница частоты между каналами
 #define CHANN8_3_FREQ     (0x6c5b45L)   // (433425000 / Fstep) Начальная частота "третьего" канала 433Мгц
 #define CHANN8_MAX            7
+
 
 
 #define NET_ID            0x0101          // Идентификатор сети
@@ -223,11 +234,10 @@ typedef struct {
 } __packed tTimeMsg;
 
 typedef struct {
-  uint8_t cmd;
   uint8_t srcNode;    // Адрес отправителя
-  uint8_t batVolt;        // Нопряжение батареи питания
-  uint8_t toNumber;   // Количество термодатчиков РТП
-  uint16_t term[30];    // Запись термодатчика
+  uint8_t msgNum;     // Номер пакета
+  uint8_t batVolt;    // Нопряжение батареи питания
+  uint16_t term;       // Запись термодатчика
 } __packed tToMsg;
 
 typedef struct {
@@ -255,11 +265,11 @@ typedef struct {
 #define payBuf       payLoad.u8
 #define payCmd       payLoad.cmdMsg.cmd
 #define payUtime     payLoad.timeMsg.time
-#define payMs         payLoad.timeMsg.ms
+#define payMs        payLoad.timeMsg.ms
 #define paySrcNode   payLoad.toMsg.srcNode
-#define payToNumber  payLoad.toMsg.toNumber
-#define payBat        payLoad.toMsg.batVolt
-#define payTerm       payLoad.toMsg.term
+#define payMsgNum    payLoad.toMsg.msgNum
+#define payBat       payLoad.toMsg.batVolt
+#define payTerm      payLoad.toMsg.term
 
 //  uint8_t bufLen;       // Длина приемного буфера
 } __packed tPkt;
@@ -276,7 +286,7 @@ void rfmInit( void );
 // Начальный сброс трансивера
 void rfmRst( void );
 // Переключение рабочего режима с блокировкой
-void rfmSetOpmode_s( uint8_t opMode );
+void rfmSetMode_s( uint8_t opMode );
 // Салибровка RC-генератора
 void rfmRcCal( void );
 void rfmTransmit_s( tPkt * ppkt );

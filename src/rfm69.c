@@ -320,8 +320,9 @@ static inline void rfmRegSetup( void ){
   // Калибровка RC-генратора
   rfmRcCal();
   // Настройка bitrate
-  rfmRegWrite( REG_BR_MSB, 0x1A );   // Default
-  rfmRegWrite( REG_BR_LSB, 0x0B );   // Default
+
+  rfmRegWrite( REG_BR_MSB, RF_BR_MSB );   // Default
+  rfmRegWrite( REG_BR_LSB, RF_BR_LSB );   // Default
   // rfmRegWrite( REG_BR_MSB, 0x68 );
   // rfmRegWrite( REG_BR_LSB, 0x2B );
 

@@ -144,7 +144,6 @@ void ADC1_COMP_IRQHandler(void){
 * @brief This function handles RTC global interrupt through EXTI lines 17, 19 and 20 and LSE CSS interrupt through EXTI line 19.
 */
 void RTC_IRQHandler(void){
-  // TODO: Обработка прерывания от часов
   if( RTC->ISR & RTC_ISR_WUTF ){
     // Wake-Up timer interrupt
     //Clear WUTF
@@ -165,32 +164,46 @@ void RTC_IRQHandler(void){
 */
 void EXTI0_1_IRQHandler(void)
 {
-  // TODO: Обработка прерывания от RFM-69: Dio0
+  if( rfm.mode == MODE_RX ){
+    // Если что-то и приняли, то случайно
+    // Опустошаем FIFO
+    while( dioRead(DIO_RX_FIFONE) == SET ){
+      rfmRegRead( REG_FIFO );
+    }
+  }
+  else if( rfm.mode == MODE_TX ) {
+    // Отправили пакет с температурой
+  }
+  // Выключаем RFM69
+  rfmSetMode_s( REG_OPMODE_SLEEP );
+
 }
 
 // Прерывание по PA3 - DIO3 RSSI
 // Канал кем-то занят
 void EXTI2_3_IRQHandler( void ){
-  uint32_t timeNow;
+  tUxTime timeNow;
 
   EXTI->PR |= DIO3_PIN;
+  rfmSetMode_s( REG_OPMODE_SLEEP );
+
   // Канал занят - Выжидаем паузу 30мс + x * 20мс
   timeNow = getRtcTime();
   if( timeNow > sendTryStopTime ){
     // Время на попытки отправить данные вышло - все бросаем до следующего раза
+    wutStop();
     return;
   }
   // Можно еще попытатся - выждем паузу
-
+  csmaPause();
 }
 
 
 /**
 * @brief This function handles I2C1 event global interrupt / I2C1 wake-up interrupt through EXTI line 23.
 */
-void I2C1_IRQHandler(void)
-{
-  // TODO: Обработка прерывания I2C: работа с термодатчиком
+void I2C1_IRQHandler(void) {
+  // Обработка прерывания I2C: работа с термодатчиком
   thermoIrqHandler();
 }
 

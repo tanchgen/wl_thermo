@@ -5,9 +5,8 @@
  *      Author: GennadyTanchin <g.tanchin@yandex.ru>
  */
 
+#include <stm32l0xx_ll_adc.h>
 #include "stm32l0xx.h"
-#include "stm32l0xx_ll_adc.h"
-
 #include "main.h"
 #include "process.h"
 #include "bat.h"
