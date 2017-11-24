@@ -42,10 +42,13 @@
 volatile uint32_t mTick;
 
 EEMEM tEeBackup eeBackup;     // Структура сохраняемых в EEPROM параметров
+//tEeBackup eeBackup;             // Структура сохраняемых в EEPROM параметров
 
-volatile tSensData sensData;           // Структура измеряемых датчиком параметров
-volatile eState state;                          // Состояние машины
-volatile tFlags flags;                 // Флаги состояний системы
+EEMEM uint16_t dfltData = 0xA569;
+
+volatile tSensData sensData;    // Структура измеряемых датчиком параметров
+volatile eState state;          // Состояние машины
+volatile tFlags flags;          // Флаги состояний системы
 
 
 /* Private function prototypes -----------------------------------------------*/
@@ -67,11 +70,11 @@ static inline void eepromUnlock( void );
 int main(int argc, char* argv[])
 {
   // Send a greeting to the trace device (skipped on Release).
-  trace_puts("Hello ARM World!");
+//  trace_puts("Hello ARM World!");
 
   // At this stage the system clock should have already been configured
   // at high speed.
-  trace_printf("System clock: %u Hz\n", SystemCoreClock);
+//  trace_printf("System clock: %u Hz\n", SystemCoreClock);
 
   mainInit();
   sysClockInit();
@@ -81,12 +84,14 @@ int main(int argc, char* argv[])
 
   /* Initialize all configured peripherals */
   batInit();
-  thermoInit();
-  rfmInit();
-  timeInit();
+  tmp75Init();
+//  rfmInit();
+//  timeInit();
 
   // Запустили измерения
   mesureStart();
+  mDelay(TO_MESUR_DELAY);
+  thermoRead();
 
   // Infinite loop
   while (1){
@@ -104,14 +109,13 @@ static inline void mainInit( void ){
 
 
 static inline void sysClockInit(void){
-
   // MSI range 4194 kHz
-  RCC->ICSCR = (RCC->ICSCR & ~RCC_ICSCR_MSIRANGE) | RCC_ICSCR_MSIRANGE_2 | RCC_ICSCR_MSIRANGE_1;
+  RCC->ICSCR = (RCC->ICSCR & ~RCC_ICSCR_MSIRANGE) | RCC_ICSCR_MSIRANGE_6;
 
   SysTick_Config( 4194 );
   // SysTick_IRQn interrupt configuration
+  NVIC_EnableIRQ( SysTick_IRQn );
   NVIC_SetPriority(SysTick_IRQn, 0);
-
 }
 
 static inline void pwrInit( void ){
@@ -124,10 +128,11 @@ static inline void pwrInit( void ){
   PWR->CR |= PWR_CR_CWUF;
   // MSI clock wakeup enable
   RCC->CFGR &= RCC_CFGR_STOPWUCK;
-  // Stop mode enable, Interrupt-Wakeup, SleepOnExit enable
+  // Interrupt-only Wakeup, DeepSleep enable, SleepOnExit enable
   SCB->SCR = (SCB->SCR & ~SCB_SCR_SEVONPEND_Msk) | SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk;
 
-  // Выключаем VREFIN при остановке + Быстрое просыпание: не ждем, пока восстановится VREFIN, проверяем только при запуске АЦП
+  // Выключаем VREFIN при остановке + Быстрое просыпание:
+  // не ждем, пока восстановится VREFIN, проверяем только при запуске АЦП
   PWR->CR |= PWR_CR_ULP | PWR_CR_FWU;
 }
 

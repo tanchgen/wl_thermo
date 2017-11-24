@@ -24,9 +24,9 @@ void mesureStart( void ){
   // Запускаем измерение напряжения батареи
   batStart();
   // Запускаем измерение температуры
-  thermoStart();
+  tmp75Start();
   // Устанавливаем время, через которое надо проснутся и запускаем
-  wutSet( 23 * (THERMO_ACCUR - 8) );
+  wutSet( 28 * (1 << (TMP75_ACCUR - 9)) );
 }
 
 void wutIrqHandler( void ){

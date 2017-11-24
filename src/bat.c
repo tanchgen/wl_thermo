@@ -31,10 +31,10 @@ void batInit(void){
   ADC->CCR |= ADC_CCR_VREFEN;
 
   NVIC_EnableIRQ(ADC1_COMP_IRQn);
-  NVIC_SetPriority(ADC1_COMP_IRQn,0);
+  NVIC_SetPriority(ADC1_COMP_IRQn,2);
 
   // Калибровка АЦП
-  if( eeBackup.adcCal == 0x7F ){
+  if( eeBackup.adcCal == 0x00 ){
     if ((ADC1->CR & ADC_CR_ADEN) != 0){
       ADC1->CR &= (uint32_t)(~ADC_CR_ADEN);
     }

@@ -10,34 +10,46 @@
 
 #include "stm32l0xx.h"
 
-#define THERMO_ADDR     0x48      // I2C-Адрес термодатчика с учетом сдвига под R/NW-бит
+#define TMP75_ADDR     0x48      // I2C-Адрес термодатчика с учетом сдвига под R/NW-бит
 #define R_NW            0x01      // R/NW-бит
 
-#define THERMO_REG_CR   0x01      //Адрес регистра конфигурации
-#define THERMO_REG_T    0x00      //Адрес регистра температуры
+#define TMP75_REG_CR   0x01      //Адрес регистра конфигурации
+#define TMP75_REG_T    0x00      //Адрес регистра температуры
 
-#define THERMO_SD       (uint8_t)0x01      // Маска бита ShutDown Mode (SD)
-#define THERMO_TM       (uint8_t)0x02      // Маска бита Thermostat Mode (TM)
-#define THERMO_R09      (uint8_t)0x00      // Маска точности 0.5 гр.Ц (9 бит)
-#define THERMO_R10      (uint8_t)0x20      // Маска точности 0.25 гр.Ц (10 бит)
-#define THERMO_R11      (uint8_t)0x40      // Маска точности 0.125 гр.Ц (11 бит)
-#define THERMO_R12      (uint8_t)0x60      // Маска точности 0.0625 гр.Ц (12 бит)
-#define THERMO_OS       (uint8_t)0x80      // Маска бита START One-Shot
+#define TMP75_SD       (uint8_t)0x01      // Маска бита ShutDown Mode (SD)
+#define TMP75_TM       (uint8_t)0x02      // Маска бита Thermostat Mode (TM)
+#define TMP75_R09      (uint8_t)0x00      // Маска точности 0.5 гр.Ц (9 бит)
+#define TMP75_R10      (uint8_t)0x20      // Маска точности 0.25 гр.Ц (10 бит)
+#define TMP75_R11      (uint8_t)0x40      // Маска точности 0.125 гр.Ц (11 бит)
+#define TMP75_R12      (uint8_t)0x60      // Маска точности 0.0625 гр.Ц (12 бит)
+#define TMP75_OS       (uint8_t)0x80      // Маска бита START One-Shot
 
-#define THERMO_ACCUR      9
-#define THERMO_REG_ACCUR  (((THERMO_ACCUR) - 9) << 5)
+#define TMP75_ACCUR       9
+#define TMP75_REG_ACCUR   (((TMP75_ACCUR) - 9) << 5)
+#define TO_MESUR_DELAY   (28 * (1 << (TMP75_ACCUR - 9)))
 
-//#define THERMO_START      0x02      // Значение CR - проснутся
-//#define THERMO_STOP      0x03      // Значение CR - уснуть
+//#define TMP75_START      0x02      // Значение CR - проснутся
+//#define TMP75_STOP      0x03      // Значение CR - уснуть
 
 #define I2C_TOUT        20
 
-void thermoInit( void );
+typedef enum {
+  TMP75_REG_TO,
+  TMP75_REG_CFG,
+  TMP75_REG_HI,
+  TMP75_REG_LOW,
+} eTmp75Reg;
+
+
+void tmp75Init( void );
 
 // Запуск конвертирования температуры
-void thermoStart( void );
-// Считывание измеренной температуры
+void tmp75Start( void );
+
 uint8_t thermoRead( void );
+
+// Считывание измеренной температуры
+uint16_t tmp75ToRead( void );
 
 void thermoIrqHandler( void );
 

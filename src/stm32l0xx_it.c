@@ -132,10 +132,10 @@ void ADC1_COMP_IRQHandler(void){
     uint32_t vref = ADC1->DR;
     // Пересчет: X (мВ) / 10 - 150 = Y * 0.01В. Например: 3600мВ = 210ед, 2000мВ = 50ед
     sensData.bat = (uint8_t)(((3000L * vrefCal)/vref)/10 - 150);
-    deepSleepOn();
+//    deepSleepOn();
     flags.batCplt = TRUE;
     // Не пара ли передавать данные серверу?
-    dataSendTry();
+//    dataSendTry();
   }
 }
 

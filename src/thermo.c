@@ -11,9 +11,9 @@
 #include "thermo.h"
 
 
-static inline int16_t thermoRcv( void );
-static inline void thermoErrHandler( void );
-static void thermoSend( uint8_t *buf );
+static uint8_t tmp75CfgWrite( uint8_t cfg );
+static inline uint8_t tmp75Write( uint8_t *buf, uint8_t num, uint8_t autoend );
+static uint32_t tmp75Read( uint8_t *rxBuffer, uint8_t num );
 
 static inline void i2cGpioInit(void) {
   // SCL - PB6, SDA - PB7
@@ -30,7 +30,6 @@ static inline void i2cGpioInit(void) {
   //Select AF mode (10) on PB6 and PB7
   GPIOB->MODER = (GPIOB->MODER & ~(GPIO_MODER_MODE6 | GPIO_MODER_MODE7)) \
                  | (GPIO_MODER_MODE6_1 | GPIO_MODER_MODE7_1);
-
 }
 
 
@@ -40,50 +39,109 @@ static inline void i2cInit( void ){
   RCC->CCIPR &= ~RCC_CCIPR_I2C1SEL;
 
   // Сначала отключаем I2C
-  I2C1->CR1 &= I2C_CR1_PE;
+  I2C1->CR1 &= ~I2C_CR1_PE;
   // Расчитанно из STM32CubeMX
   I2C1->TIMINGR = 0x00000004L;
-  // Включаем I2C
-  I2C1->CR1 &= I2C_CR1_PE;
 
   // Адрес ведомого
-  I2C1->CR2 = (I2C1->CR2 & ~I2C_CR2_SADD) | (THERMO_ADDR << 1);
+  I2C1->CR2 = (I2C1->CR2 & ~I2C_CR2_SADD) | (TMP75_ADDR << 1);
 #define I2C1_OWN_ADDRESS (0x00)
-  I2C2->CR2 = (I2C1_OWN_ADDRESS<<1);
+  I2C2->OAR1 = (I2C1_OWN_ADDRESS<<1);
 
 
   LL_I2C_DisableGeneralCall(I2C1);
   LL_I2C_EnableClockStretching(I2C1);
 
+  // Выключаем I2C
+  I2C1->CR1 |= I2C_CR1_PE;
+
 //  NVIC_SetPriority(I2C1_IRQn, 0);
 //  NVIC_EnableIRQ(I2C1_IRQn);
 }
 
-void thermoInit( void ){
-  uint8_t buf[2];
-
+void tmp75Init( void ){
   i2cGpioInit();
   i2cInit();
-  // Настройки термодатчика
-  buf[0] = THERMO_REG_CR;
-  buf[1] = ((uint8_t)~(THERMO_OS)) | THERMO_REG_ACCUR | THERMO_SD;
-  thermoSend( buf );
 }
 
-void thermoStart( void ){
-  uint8_t buf[2];
+void tmp75Start( void ){
+  const uint8_t cfg = TMP75_OS | TMP75_REG_ACCUR | TMP75_SD;
 
   // Отправляем команду начать измерение
-  buf[0] = THERMO_REG_CR;
-  buf[1] = THERMO_OS | THERMO_R09 | THERMO_SD;
-  thermoSend( buf );
+  // Настройки термодатчика
+  tmp75CfgWrite( cfg );
+  // Выключаем I2C
+  I2C1->CR1 &= ~I2C_CR1_PE;
 // Уснуть на время преобразования мс: 27.5 - 9бит, 55 - 10бит, 110 - 11бит, 220 - 12бит
   state = STAT_T_MESUR;
 }
 
+uint16_t tmp75ToRead( void ){
+  union{
+    uint8_t u8[4];
+    uint32_t u32;
+  } tmpBuf;
+  uint32_t to = 0xFF00;
+
+  uint8_t regAddr = TMP75_REG_TO;
+
+  // Отправляем 1 байт без autoend
+  if( tmp75Write( &regAddr, 1, 0 ) == 1){
+    if( tmp75Read( tmpBuf.u8, 2 ) != 2) {
+      flags.thermoErr = SET;
+      tmpBuf.u32 = 0xFF;
+    }
+  }
+  else {
+    flags.thermoErr = SET;
+    tmpBuf.u32 = 0xFF;
+  }
+
+
+  I2C1->CR1 &= ~I2C_CR1_PE;
+
+  to = __REV16( tmpBuf.u32 );
+
+  return ((uint16_t)to >> 4);
+}
+
+
+// Прием двух байт от TMP75
+static uint32_t tmp75Read( uint8_t *rxBuffer, uint8_t num ) {
+  uint8_t numRxBytes = 0;
+
+  I2C1->CR2 = 0;
+
+  // I2C_CR2_NBYTES = 2
+  I2C1->CR2 = (num << 16) | I2C_CR2_AUTOEND | I2C_CR2_RD_WRN | (0x48 << 1);
+
+  I2C1->CR1 |= I2C_CR1_PE;
+  I2C1->CR2 |= I2C_CR2_START;
+
+  while(I2C1->CR2 & I2C_CR2_START);
+
+  for( uint32_t i = 0; i < 0x0000001F; i++) {
+
+    if (I2C1->ISR & I2C_ISR_RXNE) {
+      // Device acknowledged and we must send the next byte
+      if (numRxBytes < num){
+        rxBuffer[numRxBytes++] = I2C1->RXDR;
+      }
+      i = 0;
+    }
+
+    if( (I2C1->ISR & I2C_ISR_BUSY) == 0) {
+      break;
+    }
+
+  }
+  return numRxBytes;
+}
+
+
 uint8_t thermoRead( void ){
   if( flags.thermoErr == 0){
-    sensData.temp = thermoRcv();
+    sensData.temp = tmp75ToRead();
   }
   flags.thermCplt = SET;
   state = STAT_T_CPLT;
@@ -91,113 +149,112 @@ uint8_t thermoRead( void ){
   return flags.thermoErr;
 }
 
-static inline int16_t thermoRcv( void ){
-  union{
-    int16_t i16t;
-    uint8_t u8t[2];
-  } rc;
-  uint32_t tout = mTick + I2C_TOUT;
 
-  if( (I2C1->ISR & I2C_ISR_BUSY) == 0 ){
-    // Ошибка на шине I2C - шина занята
-    thermoErrHandler();
-    // -128 гр.С
-    return 0xFF00;
+static inline uint8_t tmp75Write( uint8_t *buf, uint8_t num, uint8_t autoend ){
+  uint8_t numTxBytes = 0;
+  uint32_t tmp;
+
+  I2C1->CR2 = 0;
+
+  // I2C_CR2_NBYTES = 2, Slave address = 0x48
+  tmp = (num << 16) | (0x48 << 1);
+
+  if( autoend ){
+    tmp |= I2C_CR2_AUTOEND;
   }
+  else {
+    tmp &= ~I2C_CR2_AUTOEND;
+  }
+  I2C1->CR2 = tmp;
 
-  // Передаем 1 байт без автостопа
-  I2C1->CR2 = (I2C1->CR2 & ~(I2C_CR2_NBYTES | I2C_CR2_RD_WRN  | I2C_CR2_AUTOEND) ) | (1 << 16);
-  // 1-st Byte - Temperature register address to send
-  I2C2->TXDR = 0x00;
-  I2C2->CR2 |= I2C_CR2_START; // Go
-  // Подтверждение приемки адреса ведомым
-  while( (I2C1->ISR & I2C_ISR_NACKF) == 0 ){
-    if( tout <= mTick ){
-      // Ошибка на шине I2C
-      thermoErrHandler();
-      // -128 гр.С
-      return 0xFF00;
+  I2C1->CR1 |= I2C_CR1_PE;
+  I2C1->CR2 |= I2C_CR2_START;
+  while(I2C1->CR2 & I2C_CR2_START);
+
+  // Цикл передачи num байт в I2C
+  // i - индекс таймаута...
+  for( uint32_t i = 0; i < 0x0000001F; i++) {
+    if (I2C1->ISR & I2C_ISR_NACKF) {
+      // Was not acknowledged, disable device and exit
+      break;
     }
-  }
-  I2C1->ISR |= I2C_ISR_NACKF;
 
-  while( (I2C1->ISR & I2C_ISR_TC) == 0 ){
-    if( tout <= mTick ){
-      // Ошибка на шине I2C
-      thermoErrHandler();
-      // -128 гр.С
-      return 0xFF00;
+    if (I2C1->ISR & I2C_ISR_TC) {
+      // Передачу закончили - выходим
+      break;
     }
-  }
-  // Принимаем 2 байта с автостопом
-  I2C1->CR2 = (I2C1->CR2 & ~I2C_CR2_NBYTES) | (2 << 16) | I2C_CR2_RD_WRN | I2C_CR2_AUTOEND;
 
-  for( uint8_t i=0; i<2; i++){
-    tout = mTick + I2C_TOUT;
-    while( (I2C1->ISR & I2C_ISR_RXNE) == 0 ){
-      if( tout <= mTick ){
-        // Ошибка на шине I2C
-        thermoErrHandler();
-        // -128 гр.С
-        return 0xFF00;
+    if (I2C1->ISR & I2C_ISR_TXIS) {
+      // Device acknowledged and we must send the next byte
+      if (numTxBytes < num){
+        I2C1->TXDR = buf[numTxBytes++];
       }
-    }
-    rc.u8t[i] = I2C2->RXDR; // Data Byte (MSB and LSB temperature) reseived
-  }
-  // Ждем окончания приема
-  tout = mTick + I2C_TOUT;
-  while( (I2C1->ISR & I2C_ISR_BUSY) != 0 ){
-    if( tout <= mTick ){
-      // Ошибка на шине I2C
-      thermoErrHandler();
-    }
-  }
+      // Сбрасываем таймаут
+      i = 0;
 
-  return (rc.i16t >> 7);
+    }
+
+  }
+  return numTxBytes;
 }
 
-static void thermoSend( uint8_t *buf ){
-  uint32_t tout = mTick + I2C_TOUT;
+// Запись конфигурации в TMP75
+static uint8_t tmp75CfgWrite( uint8_t cfg ){
 
-  if( (I2C1->ISR & I2C_ISR_BUSY) == 0 ){
-    // Ошибка на шине I2C
-    thermoErrHandler();
-    return;
-  }
-  // Передаем 2 байта с автостопом
-  I2C1->CR2 = (I2C1->CR2 & ~(I2C_CR2_NBYTES | I2C_CR2_RD_WRN)) | (2 << 16) | I2C_CR2_AUTOEND;
+  uint8_t numTxBytes = 0;
 
-  I2C2->CR2 |= I2C_CR2_START; // Go
-  while( (I2C1->ISR & I2C_ISR_NACKF) == 0 ){
-    if( tout <= mTick ){
-      // Ошибка на шине I2C
-      thermoErrHandler();
+  I2C1->CR2 = 0;
+
+  // I2C_CR2_NBYTES = 2, Slave address = 0x48, AUTOEND
+  I2C1->CR2 = (2 << 16) | (0x48 << 1) | I2C_CR2_AUTOEND;;
+
+  I2C1->CR1 |= I2C_CR1_PE;
+  I2C1->CR2 |= I2C_CR2_START;
+  while( (I2C1->CR2 & I2C_CR2_START) == I2C_CR2_START );
+
+  // Цикл передачи num байт в I2C
+  // i - индекс таймаута...
+  for( uint32_t i = 0; i < 0x0000001F; i++) {
+    if (I2C1->ISR & I2C_ISR_NACKF) {
+      // Was not acknowledged, disable device and exit
+      break;
     }
-  }
-  I2C1->ISR |= I2C_ISR_NACKF;
-  while( (I2C1->ISR & I2C_ISR_TXIS) == 0 )
-  {}
-  I2C2->TXDR = *buf++; // 1-st Byte to send
-  while( (I2C1->ISR & I2C_ISR_TXIS) == 0 )
-  {}
-  I2C2->TXDR = *buf; // 2-nd Byte to send
 
-  // Ждем окончания передачи
-  tout = mTick + I2C_TOUT;
-  while( (I2C1->ISR & I2C_ISR_BUSY) != 0 ){
-    if( tout <= mTick ){
-      // Ошибка на шине I2C
-      thermoErrHandler();
+    if (I2C1->ISR & I2C_ISR_TC) {
+      // Передачу закончили - выходим
+      break;
     }
-  }
+    if( (I2C1->ISR & I2C_ISR_BUSY) == 0 ) {
+      // Передачу закончили - выходим
+      break;
+    }
 
+    if (I2C1->ISR & I2C_ISR_TXIS) {
+      // Device acknowledged and we must send the next byte
+      if (numTxBytes == 0){
+        // Отправляем номер регистра - CFG;
+        I2C1->TXDR = TMP75_REG_CR;
+        numTxBytes++;
+      }
+      else if (numTxBytes == 1){
+        // Отправляем байт конфигурации;
+        I2C1->TXDR = cfg;
+        numTxBytes++;
+      }
+      // Сбрасываем таймаут
+      i = 0;
+    }
+
+  }
+  return numTxBytes;
 }
 
 void thermoIrqHandler( void ){
   __NOP();
 }
 
-static inline void thermoErrHandler( void ){
+#if 0
+static void thermoErrHandler( void ){
   flags.thermoErr = SET;
   sensData.temp = 0xFF00;
   // Сброс I2C
@@ -206,3 +263,4 @@ static inline void thermoErrHandler( void ){
   __NOP(); __NOP(); __NOP();
   I2C1->CR1 |= I2C_CR1_PE;
 }
+#endif
