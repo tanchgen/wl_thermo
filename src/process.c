@@ -15,6 +15,8 @@
 #include "rfm69.h"
 #include "process.h"
 
+extern uint8_t regBuf[];
+
 volatile tUxTime sendTryStopTime;
 static uint8_t msgNum;      // Порядковый номер отправляемого пакета
 
@@ -30,6 +32,9 @@ void mesureStart( void ){
 }
 
 void wutIrqHandler( void ){
+
+	regBuf[1] = rfmRegRead( REG_OPMODE );
+
   // По какому поводу был включен WUT? - состояние машины
   switch( state ){
     case STAT_T_MESUR:
@@ -46,7 +51,7 @@ void wutIrqHandler( void ){
       // Отправить сообщение
       correctAlrm( ALRM_A );
       sensDataSend();
-
+      state = STAT_TX_START;
       break;
     case STAT_RF_CSMA_PAUSE:
       // Пробуем еще раз проверить частоту канала
@@ -123,6 +128,6 @@ static void sensDataSend( void ){
   // Длина payload = 1(nodeAddr) + 1(msgNum) + 1(bat) + 2(temp)
   pkt.payLen = 5;
 
-  rfmTransmit( &pkt );
+  rfmTransmit_s( &pkt );
 
 }

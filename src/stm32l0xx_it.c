@@ -147,7 +147,18 @@ void RTC_IRQHandler(void){
   if( RTC->ISR & RTC_ISR_WUTF ){
     // Wake-Up timer interrupt
     //Clear WUTF
+    // Write access for RTC registers
+	RTC->WPR = 0xCA;
+	RTC->WPR = 0x53;
+	  RTC->CR &= ~RTC_CR_WUTE;
+	  while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
+	  {}
     RTC->ISR &= ~RTC_ISR_WUTF;
+//	RTC->ISR = (~((RTC_ISR_WUTF | RTC_ISR_INIT) & 0x0000FFFFU) | (RTC->ISR & RTC_ISR_INIT));
+    RTC->CR |= RTC_CR_WUTE;
+    // Disable write access
+    RTC->WPR = 0xFE;
+    RTC->WPR = 0x64;
     wutIrqHandler();
   }
   if( RTC->ISR & RTC_ISR_ALRAF ){
@@ -155,7 +166,9 @@ void RTC_IRQHandler(void){
     //Clear ALRAF
     RTC->ISR &= ~RTC_ISR_ALRAF;
     uxTime = getRtcTime();
-    mesureStart();
+    if(state == STAT_READY){
+      mesureStart();
+    }
   }
 }
 
@@ -173,6 +186,7 @@ void EXTI0_1_IRQHandler(void)
   }
   else if( rfm.mode == MODE_TX ) {
     // Отправили пакет с температурой
+	state = STAT_READY;
   }
   // Выключаем RFM69
   rfmSetMode_s( REG_OPMODE_SLEEP );
@@ -192,6 +206,7 @@ void EXTI2_3_IRQHandler( void ){
   if( timeNow > sendTryStopTime ){
     // Время на попытки отправить данные вышло - все бросаем до следующего раза
     wutStop();
+    state = STAT_READY;
     return;
   }
   // Можно еще попытатся - выждем паузу

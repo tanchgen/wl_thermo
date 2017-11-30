@@ -80,11 +80,13 @@ enum{
 #endif
 
 typedef enum {
+  STAT_READY,
   STAT_T_MESUR,
   STAT_T_READ,
   STAT_T_CPLT,
   STAT_RF_CSMA_START,
   STAT_RF_CSMA_PAUSE,
+  STAT_TX_START
 } eState;
 
 // Структура сохраняемых в EEPROM параметров
@@ -97,12 +99,12 @@ typedef struct {
 } tEeBackup;
 
 // Структура измеряемых датчиком параметров
-typedef struct __packed {
-  uint8_t rssi;         // Мощность принимаемого радиосигнала
+typedef struct  __packed {
   int16_t temp;         // Измеряемая температура
   int16_t tempPrev;     // Температура предыдущего (1мин) измерения
   int16_t tempPrev6;    // Температура предыдущего переданного (6мин) измерения
   uint8_t bat;          // Напряжение питания
+  uint8_t rssi;         // Мощность принимаемого радиосигнала
 } tSensData;
 
 typedef struct{

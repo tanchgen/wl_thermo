@@ -41,15 +41,15 @@
 
 volatile uint32_t mTick;
 
-EEMEM tEeBackup eeBackup;     // Структура сохраняемых в EEPROM параметров
-//tEeBackup eeBackup;             // Структура сохраняемых в EEPROM параметров
-
-EEMEM uint16_t dfltData = 0xA569;
+//EEMEM tEeBackup eeBackup;     // Структура сохраняемых в EEPROM параметров
+tEeBackup eeBackup;             // Структура сохраняемых в EEPROM параметров
 
 volatile tSensData sensData;    // Структура измеряемых датчиком параметров
 volatile eState state;          // Состояние машины
 volatile tFlags flags;          // Флаги состояний системы
 
+
+extern regBuf[];
 
 /* Private function prototypes -----------------------------------------------*/
 static inline void mainInit( void );
@@ -59,16 +59,10 @@ static inline void eepromUnlock( void );
 
 // ----- main() ---------------------------------------------------------------
 
-// Sample pragmas to cope with warnings. Please note the related line at
-// the end of this function, used to pop the compiler diagnostics status.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wmissing-declarations"
-#pragma GCC diagnostic ignored "-Wreturn-type"
-
-
 int main(int argc, char* argv[])
 {
+  (void)argc;
+  (void)argv;
   // Send a greeting to the trace device (skipped on Release).
 //  trace_puts("Hello ARM World!");
 
@@ -78,25 +72,63 @@ int main(int argc, char* argv[])
 
   mainInit();
   sysClockInit();
-  pwrInit();
+//  pwrInit();
   // Разлочили EEPROM
-  eepromUnlock();
+//  eepromUnlock();
 
   /* Initialize all configured peripherals */
   batInit();
   tmp75Init();
-//  rfmInit();
+  rfmInit();
+  // !!! Дебажим  регистры !!!
+  for( uint8_t i = 1; i < 0x50; i++ ){
+  	regBuf[i] = rfmRegRead( i );
+  }
 //  timeInit();
 
   // Запустили измерения
-  mesureStart();
-  mDelay(TO_MESUR_DELAY);
-  thermoRead();
+//  mesureStart();
+
+  // Запускаем измерение напряжения батареи
+  batStart();
+  // Запускаем измерение температуры
+  tmp75Start();
+
+  mDelay(220);
+
+  // !!! Дебажим  регистры !!!
+  for( uint8_t i = 1; i < 0x50; i++ ){
+  	regBuf[i] = rfmRegRead( i );
+  }
+  rfmSetMode_s( REG_OPMODE_RX );
+  mDelay(5);
+  rfmSetMode_s( REG_OPMODE_SLEEP );
+  mDelay(5);
+  // !!! Дебажим  регистры !!!
+  for( uint8_t i = 1; i < 0x50; i++ ){
+  	regBuf[i] = rfmRegRead( i );
+  }
+
+  // ---- Формируем пакет данных -----
+  pkt.paySrcNode = rfm.nodeAddr;
+  pkt.payMsgNum = 1;
+  pkt.payBat = sensData.bat;
+  pkt.payTerm = sensData.temp;
+
+  // Передаем заполненую при измерении запись
+  pkt.nodeAddr = BCRT_ADDR;
+  // Длина payload = 1(nodeAddr) + 1(msgNum) + 1(bat) + 2(temp)
+  pkt.payLen = 5;
+
+  rfmTransmit_s( &pkt );
+
+
+  rfmSetMode_s( REG_OPMODE_SLEEP );
 
   // Infinite loop
   while (1){
     // Заснули до конца измерения
-    __WFI();
+//    __WFI();
   }
   // Infinite loop, never return.
 }
@@ -127,7 +159,7 @@ static inline void pwrInit( void ){
   // Clear PWR_CSR_WUF
   PWR->CR |= PWR_CR_CWUF;
   // MSI clock wakeup enable
-  RCC->CFGR &= RCC_CFGR_STOPWUCK;
+  RCC->CFGR &= ~RCC_CFGR_STOPWUCK;
   // Interrupt-only Wakeup, DeepSleep enable, SleepOnExit enable
   SCB->SCR = (SCB->SCR & ~SCB_SCR_SEVONPEND_Msk) | SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk;
 
@@ -144,8 +176,5 @@ static inline void eepromUnlock( void ){
     FLASH->PEKEYR = FLASH_PEKEY2;
   }
 }
-
-
-#pragma GCC diagnostic pop
 
 // ----------------------------------------------------------------------------

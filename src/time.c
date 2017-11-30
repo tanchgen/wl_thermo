@@ -28,13 +28,16 @@ static void RTC_CorrAlrm( tRtc * prtc, uint8_t alrm );
 
 // *********** Инициализация структуры ВРЕМЯ (сейчас - системное ) ************
 void rtcInit(void){
+
+  PWR->CR |= PWR_CR_DBP;
+  RCC->CSR |= RCC_CSR_RTCRST;
+  RCC->CSR &= ~RCC_CSR_RTCRST;
   // Enable the LSE
   RCC->CSR |= RCC_CSR_LSEON;
   // Wait while it is not ready
   while( (RCC->CSR & RCC_CSR_LSERDY) != RCC_CSR_LSERDY)
   {}
 
-  PWR->CR |= PWR_CR_DBP;
   // LSE enable for RTC clock
   RCC->CSR = (RCC->CSR & ~RCC_CSR_RTCSEL) | RCC_CSR_RTCSEL_0 | RCC_CSR_RTCEN;
 
@@ -69,7 +72,7 @@ void rtcInit(void){
   // частота = RTCCLOCK (32768кГц) / 2: T = ~61.05мкс
   RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | RTC_CR_WUCKSEL_1 | RTC_CR_WUCKSEL_0 | RTC_CR_WUTIE;
   // Disable WUT
-  RTC->CR &= RTC_CR_WUTE;
+  RTC->CR |= RTC_CR_WUTE;
 
   // Disable write access
   RTC->WPR = 0xFE;

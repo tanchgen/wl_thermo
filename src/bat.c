@@ -63,6 +63,6 @@ void batStart( void ){
   {}
   ADC1->CR |= ADC_CR_ADSTART;
   // Выключаем режим DeepSleep - включаем Sleep
-  deepSleepOff();
+//  deepSleepOff();
 }
 
