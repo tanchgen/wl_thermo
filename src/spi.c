@@ -49,7 +49,7 @@ void spiInit(void) {
   // Set Master Mode and Software control of slave select
 
   SPI1->CR1 = (SPI1->CR1 & ~(SPI_CR1_CPOL | SPI_CR1_CPHA | SPI_CR1_SSM)) \
-		  /*| SPI_CR1_BR_2 */| SPI_CR1_MSTR | SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI;
+		 /*| SPI_CR1_BR_2 */| SPI_CR1_MSTR | SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI;
   // Slave select output enabled
 //  SPI1->CR2 = SPI_CR2_SSOE;
   // SPI включается непосредственно перед пердачей или приемом

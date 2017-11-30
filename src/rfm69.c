@@ -118,6 +118,7 @@ void rfmFreqSet( uint32_t freq ){
 
 // Переключение рабочего режима с блокировкой
 void rfmSetMode_s( uint8_t mode ){
+	uint8_t rc;
   uint8_t nowMode;
 
   nowMode = rfmRegRead( REG_OPMODE );
@@ -126,8 +127,9 @@ void rfmSetMode_s( uint8_t mode ){
   rfmRegWrite( REG_OPMODE, nowMode );
 
   // Проверяем/ждем что режим включился
-  while( (rfmRegRead(REG_FLAG1) & REG_IF1_MODEREADY) == 0 )
-  {}
+  do{
+  	rc = rfmRegRead(REG_FLAG1);
+  } while ( rc != REG_IF1_MODEREADY);
   rfm.mode = mode >> 2;
 }
 
@@ -252,7 +254,6 @@ static inline void dioInit( void ){
   RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
 
   //---- Инициализация выводов для RFM_RST: Выход, 400кГц, ОК, без подтяжки ---
-  RFM_RST_PORT->OTYPER |= RFM_RST_PIN;
   RFM_RST_PORT->OSPEEDR &= ~(0x3 << (RFM_RST_PIN_NUM * 2));
   RFM_RST_PORT->PUPDR &= ~(0x3<< (RFM_RST_PIN_NUM * 2));
   RFM_RST_PORT->MODER = (RFM_RST_PORT->MODER &  ~(0x3<< (RFM_RST_PIN_NUM * 2))) |

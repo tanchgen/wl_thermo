@@ -49,7 +49,7 @@ volatile eState state;          // Состояние машины
 volatile tFlags flags;          // Флаги состояний системы
 
 
-extern regBuf[];
+extern uint8_t regBuf[];
 
 /* Private function prototypes -----------------------------------------------*/
 static inline void mainInit( void );
