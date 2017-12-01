@@ -112,7 +112,6 @@ void rfmFreqSet( uint32_t freq ){
   }
 
   rfmSetMode_s( oldMode );
-  rfm.mode = oldMode >> 2;
 }
 
 
@@ -127,9 +126,9 @@ void rfmSetMode_s( uint8_t mode ){
   rfmRegWrite( REG_OPMODE, nowMode );
 
   // Проверяем/ждем что режим включился
-  do{
-  	rc = rfmRegRead(REG_FLAG1);
-  } while ( rc != REG_IF1_MODEREADY);
+  while( (rc = dioRead(DIO_MODEREADY)) == 0 )
+  {}
+
   rfm.mode = mode >> 2;
 }
 
@@ -148,11 +147,16 @@ void rfmRcCal( void ){
 void rfmTransmit_s( tPkt * ppkt ){
   uint8_t rc;
 
-  rfmTransmit( ppkt );
+  EXTI->IMR &= ~DIO0_PIN;
+  EXTI->PR |= DIO0_PIN;
+
+  rfmTransmit( ppkt );  mDelay(220);
 
   // Ждем, пока закончится передача
   while( (rc=dioRead(DIO_PAYL_RDY)) == 0 )
   {}
+
+  EXTI->IMR |= DIO0_PIN;
 }
 
 
@@ -270,10 +274,10 @@ static inline void dioInit( void ){
   GPIOA->MODER &= ~(0x3 | (0x3 << (1 * 2)) | (0x3 << (2 * 2)) | (0x3 << (3 * 2)) | (0x3 << (6 * 2)) );
 
   // Dio5 - PB2
-  GPIOA->OTYPER &= ~(GPIO_Pin_2);
-  GPIOA->OSPEEDR = (GPIOA->OSPEEDR & ~(0x3 << (2 * 2))) | (0x1 << (2 * 2));
-  GPIOA->PUPDR &= ~(0x3 << (1 * 2));
-  GPIOA->MODER &= ~(0x3 << (1 * 2));
+  GPIOB->OTYPER &= ~(GPIO_Pin_2);
+  GPIOB->OSPEEDR = (GPIOB->OSPEEDR & ~(0x3 << (2 * 2))) | (0x1 << (2 * 2));
+  GPIOB->PUPDR &= ~(0x3 << (2 * 2));
+  GPIOB->MODER &= ~(0x3 << (2 * 2));
 
   // Инициализация прерывания от DIO0 и DI03
   // Select Dio0-Port for Dio0-Pin extended interrupt by writing 0000 in EXTI0
@@ -283,15 +287,15 @@ static inline void dioInit( void ){
   SYSCFG->EXTICR[DIO3_PIN_NUM / 4] |= (uint16_t)( DIO3_PORT_NUM << (DIO3_PIN_NUM * 4) );
 
   // Configure the corresponding mask bit in the EXTI_IMR register
-  EXTI->IMR |= (DIO0_PIN | DIO3_PIN );
+  EXTI->IMR |= (DIO0_PIN);
   // Configure the Trigger Selection bits of the Interrupt line on rising edge
   EXTI->RTSR |= (DIO0_PIN | DIO3_PIN );
   // ----------- Configure NVIC for Extended Interrupt --------
   NVIC_EnableIRQ( DIO0_EXTI_IRQn );
-  NVIC_SetPriority( DIO0_EXTI_IRQn, 0 );
+  NVIC_SetPriority( DIO0_EXTI_IRQn, 2 );
 
   NVIC_EnableIRQ( DIO3_EXTI_IRQn );
-  NVIC_SetPriority( DIO3_EXTI_IRQn, 0 );
+  NVIC_SetPriority( DIO3_EXTI_IRQn, 2 );
 
 }
 
@@ -318,9 +322,25 @@ static inline void rfDataInit( void ){
 
 #if 1 // Для тестирования настройки из БКРТ
 static inline void rfmRegSetup( void ){
-  rfmSetMode_s( REG_OPMODE_STDBY );
+	// Переводим в режим STANBY ( SequencerOff = 0, ListenOn = 0, ListenAbort = 0, Mode = STANDBY )
+  rfmRegWrite( REG_OPMODE,  REG_OPMODE_STDBY );
+  while( (rfmRegRead(REG_OPMODE) & REG_OPMODE_STDBY) == 0)
+  {}
+
   // Калибровка RC-генратора
   rfmRcCal();
+
+  // Настройка DIO:
+  // DIO0 - 0b00  // RX- CrcOk, TX- PacketSent
+  // DIO1 - 0b01  // RX- FifoFull, TX- FifoFull
+  // DIO2 - 0b00  // RX- FifoNotEmpty, TX- FifoNotEmpty
+  // // DIO3 - 0b10  // RX- SyncAddr, TX - ----
+  // DIO3 - 0b01  // RX- RSSI, TX - ----
+  // DIO4 - 0b01  // RX- RSSI, TX - ----
+  // DIO5 - 0b11  // RX- ModeReady, TX - ModeReady
+  rfmRegWrite( REG_DIO_MAP1, 0x11 );
+  rfmRegWrite( REG_DIO_MAP2, 0x77 );
+
   // Настройка bitrate
   rfmRegWrite( REG_BR_MSB, 0x1A );   // Default
   rfmRegWrite( REG_BR_LSB, 0x0B );   // Default
@@ -344,16 +364,6 @@ static inline void rfmRegSetup( void ){
 
   // Настройка усилителя передатчика PA0 - выкл, PA1 - вкл.  Мощность - +10 дБм: (-18 + 28)
   rfmRegWrite( REG_PA_LVL, 0x40 | (TX_PWR_10) );
-  // Настройка DIO:
-  // DIO0 - 0b00  // RX- CrcOk, TX- PacketSent
-  // DIO1 - 0b01  // RX- FifoFull, TX- FifoFull
-  // DIO2 - 0b00  // RX- FifoNotEmpty, TX- FifoNotEmpty
-  // // DIO3 - 0b10  // RX- SyncAddr, TX - ----
-  // DIO3 - 0b01  // RX- RSSI, TX - ----
-  // DIO4 - 0b01  // RX- RSSI, TX - ----
-  // DIO5 - 0b11  // RX- ModeReady, TX - ModeReady
-  rfmRegWrite( REG_DIO_MAP1, 0x11 );
-  rfmRegWrite( REG_DIO_MAP2, 0x77 );
   // Настройка Sync-последовательности: Sync(NetID - вкл), 2 байта, (Net ID = 0x0101)
   rfmRegWrite( REG_SYNC1, (uint8_t)(rfm.netId >> 8) );
   rfmRegWrite( REG_SYNC2, (uint8_t)rfm.netId );

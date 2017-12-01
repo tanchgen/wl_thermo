@@ -88,7 +88,7 @@ void rtcInit(void){
   // Rising edge for line 20
   EXTI->RTSR |= EXTI_RTSR_TR20;
 
-  NVIC_SetPriority(RTC_IRQn, 0);
+  NVIC_SetPriority(RTC_IRQn, 1);
   NVIC_EnableIRQ(RTC_IRQn);
 }
 

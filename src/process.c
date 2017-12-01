@@ -33,8 +33,6 @@ void mesureStart( void ){
 
 void wutIrqHandler( void ){
 
-	regBuf[1] = rfmRegRead( REG_OPMODE );
-
   // По какому поводу был включен WUT? - состояние машины
   switch( state ){
     case STAT_T_MESUR:
@@ -48,6 +46,8 @@ void wutIrqHandler( void ){
       break;
     case STAT_RF_CSMA_START:
       // Канал свободен - отправляем сообщение
+      EXTI->IMR &= ~(DIO3_PIN);
+    	rfmSetMode_s( REG_OPMODE_SLEEP );
       // Отправить сообщение
       correctAlrm( ALRM_A );
       sensDataSend();
@@ -91,6 +91,10 @@ int8_t dataSendTry( void ){
 // Начинаем слушат эфир на предмет свободности канала
 void csmaRun( void ){
   state = STAT_RF_CSMA_START;
+  // Включаем прерывание от DIO3 (RSSI)
+  EXTI->PR |= DIO3_PIN;
+  EXTI->IMR |= (DIO3_PIN);
+
   rfmSetMode_s( REG_OPMODE_RX );
   // Будем слушать эфир в течение 20 мс
   wutSet( TX_DURAT );
@@ -128,6 +132,6 @@ static void sensDataSend( void ){
   // Длина payload = 1(nodeAddr) + 1(msgNum) + 1(bat) + 2(temp)
   pkt.payLen = 5;
 
-  rfmTransmit_s( &pkt );
+  rfmTransmit( &pkt );
 
 }

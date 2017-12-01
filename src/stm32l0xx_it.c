@@ -155,7 +155,7 @@ void RTC_IRQHandler(void){
 	  {}
     RTC->ISR &= ~RTC_ISR_WUTF;
 //	RTC->ISR = (~((RTC_ISR_WUTF | RTC_ISR_INIT) & 0x0000FFFFU) | (RTC->ISR & RTC_ISR_INIT));
-    RTC->CR |= RTC_CR_WUTE;
+//    RTC->CR |= RTC_CR_WUTE;
     // Disable write access
     RTC->WPR = 0xFE;
     RTC->WPR = 0x64;
@@ -170,6 +170,7 @@ void RTC_IRQHandler(void){
       mesureStart();
     }
   }
+  EXTI->PR |= EXTI_PR_PR17;
 }
 
 /**
@@ -177,6 +178,7 @@ void RTC_IRQHandler(void){
 */
 void EXTI0_1_IRQHandler(void)
 {
+	EXTI->PR |= DIO0_PIN;
   if( rfm.mode == MODE_RX ){
     // Если что-то и приняли, то случайно
     // Опустошаем FIFO
@@ -198,7 +200,10 @@ void EXTI0_1_IRQHandler(void)
 void EXTI2_3_IRQHandler( void ){
   tUxTime timeNow;
 
+  // Выключаем прерывание от DIO3 (RSSI)
   EXTI->PR |= DIO3_PIN;
+  EXTI->IMR &= ~(DIO3_PIN);
+
   rfmSetMode_s( REG_OPMODE_SLEEP );
 
   // Канал занят - Выжидаем паузу 30мс + x * 20мс

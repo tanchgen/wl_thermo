@@ -80,14 +80,10 @@ int main(int argc, char* argv[])
   batInit();
   tmp75Init();
   rfmInit();
-  // !!! Дебажим  регистры !!!
-  for( uint8_t i = 1; i < 0x50; i++ ){
-  	regBuf[i] = rfmRegRead( i );
-  }
-//  timeInit();
+  timeInit();
 
   // Запустили измерения
-//  mesureStart();
+  mesureStart();
 
   // Запускаем измерение напряжения батареи
   batStart();
@@ -97,36 +93,17 @@ int main(int argc, char* argv[])
   mDelay(220);
 
   // !!! Дебажим  регистры !!!
-  for( uint8_t i = 1; i < 0x50; i++ ){
-  	regBuf[i] = rfmRegRead( i );
-  }
-  rfmSetMode_s( REG_OPMODE_RX );
-  mDelay(5);
-  rfmSetMode_s( REG_OPMODE_SLEEP );
-  mDelay(5);
-  // !!! Дебажим  регистры !!!
-  for( uint8_t i = 1; i < 0x50; i++ ){
-  	regBuf[i] = rfmRegRead( i );
-  }
-
-  // ---- Формируем пакет данных -----
-  pkt.paySrcNode = rfm.nodeAddr;
-  pkt.payMsgNum = 1;
-  pkt.payBat = sensData.bat;
-  pkt.payTerm = sensData.temp;
-
-  // Передаем заполненую при измерении запись
-  pkt.nodeAddr = BCRT_ADDR;
-  // Длина payload = 1(nodeAddr) + 1(msgNum) + 1(bat) + 2(temp)
-  pkt.payLen = 5;
-
-  rfmTransmit_s( &pkt );
-
+//  for( uint8_t i = 1; i < 0x50; i++ ){
+//  	regBuf[i] = rfmRegRead( i );
+//  }
 
   rfmSetMode_s( REG_OPMODE_SLEEP );
 
+  GPIOB->MODER = (GPIOB->MODER & ~GPIO_MODER_MODE3) | GPIO_MODER_MODE3_0;
   // Infinite loop
   while (1){
+  	GPIOB->ODR ^= GPIO_Pin_3;
+    mDelay(200);
     // Заснули до конца измерения
 //    __WFI();
   }
