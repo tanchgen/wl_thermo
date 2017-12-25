@@ -14,7 +14,7 @@
 void rfmFreqSet( uint32_t freq );
 
 tRfm  rfm;
-uint8_t regBuf[80];     // Регистры RFM69
+uint8_t regBuf[81];     // Регистры RFM69
 tPkt pkt;            // Структура принятого пакета
 //extern uint8_t tmpVal;
 
@@ -150,7 +150,7 @@ void rfmTransmit_s( tPkt * ppkt ){
   EXTI->IMR &= ~DIO0_PIN;
   EXTI->PR |= DIO0_PIN;
 
-  rfmTransmit( ppkt );  mDelay(220);
+  rfmTransmit( ppkt );
 
   // Ждем, пока закончится передача
   while( (rc=dioRead(DIO_PAYL_RDY)) == 0 )
@@ -181,6 +181,11 @@ void rfmTransmit( tPkt *pPkt ){
 
   // Записываем все в FIFO (длина = regAddrByte + paylLenByte + nodeAddrByte + len)
   spiTrans_s( txBuf, pPkt->payLen + 3);
+
+  // Отмечаем запуск RFM_TX
+#if DEBUG_TIME
+	dbgTime.rfmTxStart = mTick;
+#endif // DEBUG_TIME
 
   // Переводим в режим передачи
   if( rfm.mode != MODE_TX ){
@@ -260,6 +265,7 @@ static inline void dioInit( void ){
   //---- Инициализация выводов для RFM_RST: Выход, 400кГц, ОК, без подтяжки ---
   RFM_RST_PORT->OSPEEDR &= ~(0x3 << (RFM_RST_PIN_NUM * 2));
   RFM_RST_PORT->PUPDR &= ~(0x3<< (RFM_RST_PIN_NUM * 2));
+  RFM_RST_PORT->PUPDR |= 0x2<< (RFM_RST_PIN_NUM * 2);
   RFM_RST_PORT->MODER = (RFM_RST_PORT->MODER &  ~(0x3<< (RFM_RST_PIN_NUM * 2))) |
                          (0x1<< (RFM_RST_PIN_NUM * 2));
 
@@ -322,9 +328,9 @@ static inline void rfDataInit( void ){
 
 #if 1 // Для тестирования настройки из БКРТ
 static inline void rfmRegSetup( void ){
-	// Переводим в режим STANBY ( SequencerOff = 0, ListenOn = 0, ListenAbort = 0, Mode = STANDBY )
-  rfmRegWrite( REG_OPMODE,  REG_OPMODE_STDBY );
-  while( (rfmRegRead(REG_OPMODE) & REG_OPMODE_STDBY) == 0)
+  //  Усыпляем радиомодуль
+  rfmRegWrite( REG_OPMODE,  REG_OPMODE_SLEEP );
+  while( (rfmRegRead(REG_OPMODE) & REG_OPMODE_SLEEP) != REG_OPMODE_SLEEP)
   {}
 
   // Калибровка RC-генратора
@@ -341,23 +347,35 @@ static inline void rfmRegSetup( void ){
   rfmRegWrite( REG_DIO_MAP1, 0x11 );
   rfmRegWrite( REG_DIO_MAP2, 0x77 );
 
+// -------------- Bitrate ------------------------
+#if 1
+  // Настройка bitrate
+  rfmRegWrite( REG_BR_MSB, 0x0D );   	// 9600 bit/s
+  rfmRegWrite( REG_BR_LSB, 0x05 );   	//
+  // Настройка девиации частоты
+  rfmRegWrite( REG_FDEV_MSB, 0x00 );
+  rfmRegWrite( REG_FDEV_LSB, 0x76 );  // 7200 Hz
+  // Настройка BW-фильтра
+  rfmRegWrite( REG_RX_BW, 0x4D );			// 12500 Hz
+  // Настройка AFC Bw
+  rfmRegWrite( REG_AFC_BW, 0x8C );		// 25000 Hz
+#else
   // Настройка bitrate
   rfmRegWrite( REG_BR_MSB, 0x1A );   // Default
   rfmRegWrite( REG_BR_LSB, 0x0B );   // Default
 //  rfmRegWrite( REG_BR_MSB, RF_BR_MSB ); 
 //  rfmRegWrite( REG_BR_LSB, RF_BR_LSB );
-
   // Настройка девиации частоты
   rfmRegWrite( REG_FDEV_MSB, 0x00 );
   rfmRegWrite( REG_FDEV_LSB, 0x52 );   // Default
-  // rfmRegWrite( REG_FDEV_LSB, 0x3B );
   // Настройка BW-фильтра
   rfmRegWrite( REG_RX_BW, 0x55 );   // Default
-  //rfmRegWrite( REG_RX_BW, 0x4D );
-  // Установка частоты несущей
-  rfmChannelSet( rfm.channel );
   // Настройка AFC Bw
   rfmRegWrite( REG_AFC_BW, 0x8B );
+#endif
+
+  // Установка частоты несущей
+  rfmChannelSet( rfm.channel );
  // rfmRegWrite( REG_AFCFEI, REG_AFCFEI_AFC_AUTO );
   // Настройка усилителя приемника: Вх. = 200 Ом, Усиление - AGC
   rfmRegWrite( REG_LNA, 0x80 );
@@ -385,7 +403,6 @@ static inline void rfmRegSetup( void ){
   rfmRegWrite( REG_FIFO_THRESH, 0x8F );
   // Настройка DAGC
   rfmRegWrite( REG_TEST_DAGC, 0x30 );
-
 }
 #else
 static inline void rfmRegSetup( void ){

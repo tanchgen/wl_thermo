@@ -113,11 +113,33 @@ typedef struct{
   unsigned int thermCplt : 1;
 } tFlags;
 
-extern volatile uint32_t mTick;
+//extern volatile uint32_t mTick;
 extern tEeBackup eeBackup;
 extern volatile tSensData sensData;           // Структура измеряемых датчиком параметров
 extern volatile tFlags flags;                 // Флаги состояний системы
 extern volatile eState state;                          // Состояние машины
+
+#define DEBUG_TIME			0
+
+#if DEBUG_TIME
+typedef struct {
+	uint32_t mcuStart;
+	uint32_t mcuEnd;
+	uint32_t rfmRxStart;
+	uint32_t rfmRxEnd;
+	uint32_t rfmTxStart;
+	uint32_t rfmTxEnd;
+	uint32_t thermoStart;
+	uint32_t thermoEnd;
+
+} tDbgTime;
+
+extern tDbgTime dbgTime;
+
+#endif // DEBUG_TIME
+
+void restoreContext(void);
+void saveContext(void);
 
 /* ########################## Assert Selection ############################## */
 /**

@@ -17,7 +17,7 @@
 
 extern uint8_t regBuf[];
 
-volatile tUxTime sendTryStopTime;
+tUxTime sendTryStopTime;
 static uint8_t msgNum;      // Порядковый номер отправляемого пакета
 
 static void sensDataSend( void );
@@ -46,13 +46,29 @@ void wutIrqHandler( void ){
       break;
     case STAT_RF_CSMA_START:
       // Канал свободен - отправляем сообщение
+      EXTI->PR |= DIO3_PIN;
       EXTI->IMR &= ~(DIO3_PIN);
+
+      // Отмечаем останов RFM_RX
+    #if DEBUG_TIME
+    	dbgTime.rfmRxEnd = mTick;
+    #endif // DEBUG_TIME
+
     	rfmSetMode_s( REG_OPMODE_SLEEP );
       // Отправить сообщение
       correctAlrm( ALRM_A );
       sensDataSend();
       state = STAT_TX_START;
       break;
+    case STAT_TX_START:
+    	// Время на пердачу вышло - останавливаем
+    	for( uint8_t i = 1; i < 50; i++ ){
+    		regBuf[i] = rfmRegRead( i );
+    	}
+    	rfmSetMode_s( REG_OPMODE_SLEEP );
+      state = STAT_READY;
+      break;
+
     case STAT_RF_CSMA_PAUSE:
       // Пробуем еще раз проверить частоту канала
       csmaRun();
@@ -69,9 +85,9 @@ int8_t dataSendTry( void ){
 
   // ------ Надо ли отправлять ? ------------
   if( flags.batCplt && flags.thermCplt ){
-    if( ((tmrf = rtc.min % 6) == 0 ) || // Время передачи наступило
+    if( ((tmrf = rtc.min % SEND_TOUT) == 0 ) || // Время передачи наступило
          (((tmp = sensData.temp - sensData.tempPrev) > 0.5) || (tmp < -0.5)) || // За 1 мин температура изменилась более, чем 0.5 гр.С
-         (((tmp = sensData.temp - sensData.tempPrev6) > 1.5) || (tmp < -1.5)) ){ // С предыдущей ОЧЕРЕДНОЙ отправки температура изменилась более, чем 1 гр.С
+         (((tmp = sensData.temp - sensData.tempPrev6) > 1) || (tmp < -1)) ){ // С предыдущей ОЧЕРЕДНОЙ отправки температура изменилась более, чем 1 гр.С
       if(tmrf == 0){
         sensData.tempPrev6 = sensData.temp;
       }
@@ -79,6 +95,9 @@ int8_t dataSendTry( void ){
       // Запоминаем время остановки попыток отправки - пробуем не более 1-2 секунды
       sendTryStopTime = getRtcTime() + 1;
       csmaRun();
+    }
+    else {
+    	state = STAT_READY;
     }
     // Сохраняем нынешнюю температуру, как предыдущую
     sensData.tempPrev = sensData.temp;
@@ -95,8 +114,13 @@ void csmaRun( void ){
   EXTI->PR |= DIO3_PIN;
   EXTI->IMR |= (DIO3_PIN);
 
+  // Отмечаем запуск RFM_RX
+#if DEBUG_TIME
+	dbgTime.rfmRxStart = mTick;
+#endif // DEBUG_TIME
+
   rfmSetMode_s( REG_OPMODE_RX );
-  // Будем слушать эфир в течение 20 мс
+  // Будем слушать эфир в течение времени передачи одного пакета * 2
   wutSet( TX_DURAT );
 }
 
@@ -122,16 +146,19 @@ void csmaPause( void ){
 
 static void sensDataSend( void ){
   // ---- Формируем пакет данных -----
+	pkt.payCmd = CMD_SENS_SEND;
   pkt.paySrcNode = rfm.nodeAddr;
   pkt.payMsgNum = msgNum++;
   pkt.payBat = sensData.bat;
-  pkt.payTerm = sensData.temp;
+  pkt.payVolume = sensData.temp;
 
   // Передаем заполненую при измерении запись
   pkt.nodeAddr = BCRT_ADDR;
   // Длина payload = 1(nodeAddr) + 1(msgNum) + 1(bat) + 2(temp)
-  pkt.payLen = 5;
+  pkt.payLen = sizeof(tSensMsg);
 
   rfmTransmit( &pkt );
+  // Таймаут до окончания передачи
+  wutSet( TX_DURAT*10 );
 
 }

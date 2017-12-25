@@ -53,7 +53,7 @@ static inline void i2cInit( void ){
   LL_I2C_EnableClockStretching(I2C1);
 
   // Выключаем I2C
-  I2C1->CR1 |= I2C_CR1_PE;
+//  I2C1->CR1 |= I2C_CR1_PE;
 
 //  NVIC_SetPriority(I2C1_IRQn, 0);
 //  NVIC_EnableIRQ(I2C1_IRQn);
@@ -64,8 +64,41 @@ void tmp75Init( void ){
   i2cInit();
 }
 
+void tmp75Stop( void ){
+  const uint8_t cfg = TMP75_REG_ACCUR | TMP75_SD;
+
+  // Отмечаем запуск измерения
+#if DEBUG_TIME
+	dbgTime.thermoStart = mTick;
+#endif // DEBUG_TIME
+
+  // Отправляем команду начать измерение
+  // Настройки термодатчика
+  tmp75CfgWrite( cfg );
+  // Выключаем I2C
+  I2C1->CR1 &= ~I2C_CR1_PE;
+}
+
+uint8_t tmp75RegRead( uint8_t regAddr ){
+	uint8_t rc;
+
+  // Отправляем 1 байт без autoend
+  if( tmp75Write( &regAddr, 1, 0 ) == 1){
+    if( tmp75Read( &rc, 1 ) != 1) {
+      rc = 0xFF;
+    }
+  }
+
+  return rc;
+}
+
 void tmp75Start( void ){
   const uint8_t cfg = TMP75_OS | TMP75_REG_ACCUR | TMP75_SD;
+
+  // Отмечаем запуск измерения
+#if DEBUG_TIME
+	dbgTime.thermoStart = mTick;
+#endif // DEBUG_TIME
 
   // Отправляем команду начать измерение
   // Настройки термодатчика
@@ -91,15 +124,24 @@ uint16_t tmp75ToRead( void ){
       flags.thermoErr = SET;
       tmpBuf.u32 = 0xFF;
     }
+    else {
+      flags.thermoErr = RESET;
+    }
   }
   else {
     flags.thermoErr = SET;
     tmpBuf.u32 = 0xFF;
   }
 
+  // Отмечаем останов измерения
+#if DEBUG_TIME
+	dbgTime.thermoEnd = mTick;
+#endif // DEBUG_TIME
+
 
   I2C1->CR1 &= ~I2C_CR1_PE;
 
+  // Переворачиваем тетрады
   to = __REV16( tmpBuf.u32 );
 
   return ((uint16_t)to >> 4);

@@ -43,13 +43,16 @@ typedef enum {
 
 void tmp75Init( void );
 
+// Считывание регистра из TMP75
+uint8_t tmp75RegRead( uint8_t regAddr );
+// Останов TMP75
+void tmp75Stop( void );
 // Запуск конвертирования температуры
 void tmp75Start( void );
-
-uint8_t thermoRead( void );
-
 // Считывание измеренной температуры
 uint16_t tmp75ToRead( void );
+
+uint8_t thermoRead( void );
 
 void thermoIrqHandler( void );
 

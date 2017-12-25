@@ -41,6 +41,8 @@
 
 /* External variables --------------------------------------------------------*/
 
+extern uint8_t regBuf[];
+
 /******************************************************************************/
 /*            Cortex-M0+ Processor Interruption and Exception Handlers         */ 
 /******************************************************************************/
@@ -48,63 +50,34 @@
 /**
 * @brief This function handles Non maskable Interrupt.
 */
-void NMI_Handler(void)
-{
-  /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
-
-  /* USER CODE END NonMaskableInt_IRQn 0 */
-  /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
-
-  /* USER CODE END NonMaskableInt_IRQn 1 */
+void NMI_Handler(void){
 }
 
 /**
 * @brief This function handles Hard fault interrupt.
 */
-void HardFault_Handler(void)
-{
-  /* USER CODE BEGIN HardFault_IRQn 0 */
-
-  /* USER CODE END HardFault_IRQn 0 */
+void HardFault_Handler(void){
   while (1)
-  {
-  }
-  /* USER CODE BEGIN HardFault_IRQn 1 */
-
-  /* USER CODE END HardFault_IRQn 1 */
+  {}
 }
 
 /**
 * @brief This function handles System service call via SWI instruction.
 */
-void SVC_Handler(void)
-{
-  /* USER CODE BEGIN SVC_IRQn 0 */
-
-  /* USER CODE END SVC_IRQn 0 */
-  /* USER CODE BEGIN SVC_IRQn 1 */
-
-  /* USER CODE END SVC_IRQn 1 */
+void SVC_Handler(void){
 }
 
 /**
 * @brief This function handles Pendable request for system service.
 */
-void PendSV_Handler(void)
-{
-  /* USER CODE BEGIN PendSV_IRQn 0 */
-
-  /* USER CODE END PendSV_IRQn 0 */
-  /* USER CODE BEGIN PendSV_IRQn 1 */
-
-  /* USER CODE END PendSV_IRQn 1 */
+void PendSV_Handler(void){
 }
 
 /**
 * @brief This function handles System tick timer.
 */
 void SysTick_Handler(void) {
-  mTick++;
+//  mTick++;
 }
 
 /******************************************************************************/
@@ -115,7 +88,7 @@ void SysTick_Handler(void) {
 /******************************************************************************/
 
 void ADC1_COMP_IRQHandler(void){
-  if( (ADC1->ISR & ADC_ISR_EOC) == 0 ){
+  if( (ADC1->ISR & ADC_ISR_EOS) == 0 ){
     // Неизвестное прерывание - перезапускаем АЦП
     if ((ADC1->CR & ADC_CR_ADSTART) != 0){
       ADC1->CR |= ADC_CR_ADSTP;
@@ -130,6 +103,10 @@ void ADC1_COMP_IRQHandler(void){
   else {
     uint32_t vrefCal = *((uint16_t *)0x1FF80078);
     uint32_t vref = ADC1->DR;
+  	// Выключаем внутренний регулятор напряжения
+    ADC1->CR |= ADC_CR_ADDIS;
+    ADC1->CR &= ~ADC_CR_ADVREGEN;
+
     // Пересчет: X (мВ) / 10 - 150 = Y * 0.01В. Например: 3600мВ = 210ед, 2000мВ = 50ед
     sensData.bat = (uint8_t)(((3000L * vrefCal)/vref)/10 - 150);
 //    deepSleepOn();
@@ -137,6 +114,8 @@ void ADC1_COMP_IRQHandler(void){
     // Не пара ли передавать данные серверу?
 //    dataSendTry();
   }
+  // Стираем
+  ADC1->ISR |= 0xFF; //ADC_ISR_EOS | ADC_ISR_EOC | ADC_ISR_EOSMP;
 }
 
 
@@ -144,12 +123,19 @@ void ADC1_COMP_IRQHandler(void){
 * @brief This function handles RTC global interrupt through EXTI lines 17, 19 and 20 and LSE CSS interrupt through EXTI line 19.
 */
 void RTC_IRQHandler(void){
+  // Отмечаем запуск MCU
+#if DEBUG_TIME
+	dbgTime.mcuStart = mTick;
+#endif // DEBUG_TIME
+
+
   if( RTC->ISR & RTC_ISR_WUTF ){
     // Wake-Up timer interrupt
     //Clear WUTF
     // Write access for RTC registers
 	RTC->WPR = 0xCA;
 	RTC->WPR = 0x53;
+	  // Останавливаем WakeUp Таймер
 	  RTC->CR &= ~RTC_CR_WUTE;
 	  while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
 	  {}
@@ -171,10 +157,16 @@ void RTC_IRQHandler(void){
     }
   }
   EXTI->PR |= EXTI_PR_PR17;
+
+  // Отмечаем Останов MCU
+#if DEBUG_TIME
+	dbgTime.mcuEnd = mTick;
+#endif // DEBUG_TIME
+
 }
 
 /**
-* @brief This function handles EXTI line 0 and line 1 interrupts.
+* Главное прерывание от RFM - DIO0
 */
 void EXTI0_1_IRQHandler(void)
 {
@@ -192,6 +184,10 @@ void EXTI0_1_IRQHandler(void)
   }
   // Выключаем RFM69
   rfmSetMode_s( REG_OPMODE_SLEEP );
+  // Отмечаем останов RFM_TX
+#if DEBUG_TIME
+	dbgTime.rfmTxEnd = mTick;
+#endif // DEBUG_TIME
 
 }
 
@@ -204,7 +200,13 @@ void EXTI2_3_IRQHandler( void ){
   EXTI->PR |= DIO3_PIN;
   EXTI->IMR &= ~(DIO3_PIN);
 
+  regBuf[REG_RSSI_VAL] = rfmRegRead( REG_RSSI_VAL );
   rfmSetMode_s( REG_OPMODE_SLEEP );
+
+  // Отмечаем останов RFM_RX
+#if DEBUG_TIME
+	dbgTime.rfmRxEnd = mTick;
+#endif // DEBUG_TIME
 
   // Канал занят - Выжидаем паузу 30мс + x * 20мс
   timeNow = getRtcTime();
@@ -227,7 +229,5 @@ void I2C1_IRQHandler(void) {
   thermoIrqHandler();
 }
 
-/* USER CODE BEGIN 1 */
 
-/* USER CODE END 1 */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

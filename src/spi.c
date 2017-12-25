@@ -35,6 +35,8 @@ void spiInit(void) {
   GPIOA->BSRR |= GPIO_Pin_4;
   GPIOA->MODER = (GPIOA->MODER & ~(GPIO_MODER_MODE4))\
                   | (GPIO_MODER_MODE4_0 );
+  // Подтяжка для режима STOP для 1 или 0 на выводе: NSS - вверх, CLS - вниз, MOSI - вниз
+  GPIOA->PUPDR |= GPIO_PUPDR_PUPD4_0 | GPIO_PUPDR_PUPD5_1 | GPIO_PUPDR_PUPD7_1;
 #endif
   //   PB4   ------> SPI1_MISO
   GPIOB->MODER = (GPIOB->MODER & ~(GPIO_MODER_MODE4)) | GPIO_MODER_MODE4_1;
@@ -63,7 +65,8 @@ void spiInit(void) {
 int8_t spiTrans_s( uint8_t *buf, uint8_t len ){
   uint32_t tout;
 
-  tout = mTick + 10;
+  // 	Таймаут ~10мс или около того...
+  tout = 20000;
   // NSS -> 0
   GPIOA->BRR |= GPIO_Pin_4;
   // SPI включается непосредственно перед пердачей или приемом
@@ -74,14 +77,14 @@ int8_t spiTrans_s( uint8_t *buf, uint8_t len ){
       *(uint8_t *)&(SPI1->DR) = *buf++;
       len--;
     }
-    if( tout < mTick){
+    if( --tout == 0){
       return -1;
     }
   }
   // Ждем окончания передачи
-  tout = mTick + 10;
+  tout = 20000;
   while( (SPI1->SR & SPI_SR_BSY) != 0 ){
-    if( tout < mTick){
+    if( --tout == 0){
       return -1;
     }
   }
@@ -99,7 +102,7 @@ int8_t spiRecv_s( uint8_t *buf, uint8_t len ){
   uint32_t tout;
 
   // На всю операцию отводим не более 10мс
-  tout = mTick + 100;
+  tout = 200000;
 //  GPIOA->BRR |= GPIO_Pin_4;
   // SPI включается непосредственно перед пердачей или приемом
   SPI1->CR1 |= SPI_CR1_SPE;
@@ -113,14 +116,14 @@ int8_t spiRecv_s( uint8_t *buf, uint8_t len ){
       *buf++ = *(uint8_t *)&(SPI1->DR);
       len--;
     }
-    if( tout < mTick){
+    if( --tout == 0){
 //      return -1;
     }
   }
   // Ждем окончания приема
-  tout = mTick + 100;
+  tout = 200000;
   while( (SPI1->SR & SPI_SR_BSY) != 0 ){
-    if( tout < mTick){
+    if( --tout == 0){
 //      return -1;
     }
   }
@@ -136,8 +139,7 @@ int8_t spiTransRecv_s( uint8_t *txBuf, uint8_t *rxBuf, uint8_t len ){
   uint32_t tout;
 
   // На всю операцию отводим не более 10мс
-  // На всю операцию отводим не более 10мс
-  tout = mTick + 10;
+  tout = 20000;
   // NSS -> 0
   GPIOA->BRR |= GPIO_Pin_4;
   // SPI включается непосредственно перед пердачей или приемом
@@ -152,14 +154,14 @@ int8_t spiTransRecv_s( uint8_t *txBuf, uint8_t *rxBuf, uint8_t len ){
       *rxBuf++ = *(uint8_t *)&(SPI1->DR);
       len--;
     }
-    if( tout < mTick){
+    if( --tout == 0){
       return -1;
     }
   }
   // Ждем окончания приема
-  tout = mTick + 10;
+  tout = 20000;
   while( (SPI1->SR & SPI_SR_BSY) != 0 ){
-    if( tout < mTick){
+    if( --tout == 0){
       return -1;
     }
   }

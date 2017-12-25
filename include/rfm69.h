@@ -210,7 +210,7 @@
  * 3байт - Преабула, 2байт - Sync, 1байт - Len, 1байт - nodeAddr, 1байт - msgNum, 1байт - battery, 1байт - temp
  * (11байт = 654мкс, при 19200 бод, 1253мкс, при 9600 бод)
  */
-#define TX_DURAT 654
+#define TX_DURAT (1260*2)
 
 // Диапазон номеров каналов: 0 - 7  (433050 кГц - 433925 кГц)
 #define CHANN8_FREQ_STEP   (100000L)    // Разница частоты между каналами
@@ -221,7 +221,7 @@
 
 #define NET_ID            0x0101          // Идентификатор сети
 //#define CHANN_DEF         ((NET_ID % 8)+1)   // RF-канал по умолчанию
-#define CHANN_DEF         0x00   // RF-канал по умолчанию
+#define CHANN_DEF         0x03   // RF-канал по умолчанию
 #define NODE_ADDR         0x01            // Собственный адрес нода по умолчанию
 #define BCRT_ADDR         0x00            // Адрес БКРТ-255
 #define BRDCAST_ADDR      0xFF            // Широковещательный адрес
@@ -257,27 +257,23 @@ typedef struct {
 } __packed tTimeMsg;
 
 typedef struct {
+	uint8_t cmd;				//
   uint8_t srcNode;    // Адрес отправителя
   uint8_t msgNum;     // Номер пакета
-  uint8_t batVolt;    // Нопряжение батареи питания
-  uint16_t term;       // Запись термодатчика
-} __packed tToMsg;
+  uint8_t batVolt;    // Напряжение батареи питания
+  uint16_t Volume;    // Значение сенсора
+} __packed tSensMsg;
 
 typedef struct {
   uint8_t cmd;
   uint8_t x8[63];
-} tCmdMsg;
+} __packed tCmdMsg;
 
-  // Длина передаваемого пакета
-  // (1Б - адрес нода) +
-  // (1Б - напряжение Батареи питания: 1ед. = мВ/20 (3.6 = 180ед., 2.7 = 135ед.))
-  // (1Б - количество датчиков N ) +
-  // (N*2Б - значения температуры) +
-  typedef   union {
+typedef union {
   uint8_t u8[64];
   tCmdMsg cmdMsg;
   tTimeMsg timeMsg;
-  tToMsg toMsg;
+  tSensMsg sensMsg;
 } __packed uPayload;
 
 
@@ -289,10 +285,10 @@ typedef struct {
 #define payCmd       payLoad.cmdMsg.cmd
 #define payUtime     payLoad.timeMsg.time
 #define payMs        payLoad.timeMsg.ms
-#define paySrcNode   payLoad.toMsg.srcNode
-#define payMsgNum    payLoad.toMsg.msgNum
-#define payBat       payLoad.toMsg.batVolt
-#define payTerm      payLoad.toMsg.term
+#define paySrcNode   payLoad.sensMsg.srcNode
+#define payMsgNum    payLoad.sensMsg.msgNum
+#define payBat       payLoad.sensMsg.batVolt
+#define payVolume    payLoad.sensMsg.Volume
 
 //  uint8_t bufLen;       // Длина приемного буфера
 } __packed tPkt;

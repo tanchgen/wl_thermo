@@ -278,10 +278,10 @@ void timersHandler( void ) {
   if ( timerCount3 > 1) {
     timerCount3--;
   }
-#endif
   if ( !(mTick % 1000) ){
     secondFlag = SET;
   }
+#endif
 }
 
 void timersProcess( void ) {
@@ -305,12 +305,24 @@ void timersProcess( void ) {
   }
 }
 
+#if 1
+// Задержка по SysTick без прерывания
+void mDelay( uint32_t t_ms ){
+	SysTick->VAL = 0;
+	while ( t_ms > 0 ){
+		while ( !( SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk ) ) // wait for underflow
+		{}
+		t_ms--;
+	}
+}
+#else
 // Задержка в мс
 void mDelay( uint32_t del ){
   uint32_t finish = mTick + del;
   while ( mTick < finish)
   {}
 }
+#endif
 
 static void RTC_SetTime( volatile tRtc * prtc ){
   register uint32_t temp = 0U;
@@ -344,7 +356,7 @@ static void RTC_SetDate( volatile tRtc * prtc ){
           BIN2BCD( prtc->month ) << RTC_POSITION_DR_MU |
           BIN2BCD( prtc->date ) << RTC_POSITION_DR_DU  |
           BIN2BCD( prtc->wday ) << RTC_POSITION_DR_WDU );
-  RTC->DR = ( RTC->DR & (RTC_DR_YT | RTC_DR_YU | RTC_DR_MT | RTC_DR_MU | RTC_DR_DT | RTC_DR_DU | RTC_DR_WDU)) | temp;
+  RTC->DR = ( RTC->DR & ~(RTC_DR_YT | RTC_DR_YU | RTC_DR_MT | RTC_DR_MU | RTC_DR_DT | RTC_DR_DU | RTC_DR_WDU)) | temp;
 
   RTC->ISR &= ~RTC_ISR_INIT;
   RTC->WPR = 0xFE;
