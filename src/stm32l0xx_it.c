@@ -33,6 +33,7 @@ void SysTick_Handler(void) {
 //  mTick++;
 }
 
+#if 0
 void ADC1_COMP_IRQHandler(void){
   if( (ADC1->ISR & ADC_ISR_EOS) == 0 ){
     // Неизвестное прерывание - перезапускаем АЦП
@@ -63,7 +64,7 @@ void ADC1_COMP_IRQHandler(void){
   // Стираем
   ADC1->ISR |= 0xFF; //ADC_ISR_EOS | ADC_ISR_EOC | ADC_ISR_EOSMP;
 }
-
+#endif
 
 /**
 * RTC global interrupt through EXTI lines 17, 19 and 20.
@@ -79,23 +80,8 @@ void RTC_IRQHandler(void){
 
   if( RTC->ISR & RTC_ISR_WUTF ){
     // Wake-Up timer interrupt
-    //Clear WUTF
-    // Write access for RTC registers
-  	RTC->WPR = 0xCA;
-  	RTC->WPR = 0x53;
-	  // Останавливаем WakeUp Таймер
-	  RTC->CR &= ~RTC_CR_WUTE;
-	  while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
-	  {}
-    RTC->ISR &= ~RTC_ISR_WUTF;
-//	RTC->ISR = (~((RTC_ISR_WUTF | RTC_ISR_INIT) & 0x0000FFFFU) | (RTC->ISR & RTC_ISR_INIT));
-//    RTC->CR |= RTC_CR_WUTE;
-    // Disable write access
-    RTC->WPR = 0xFE;
-    RTC->WPR = 0x64;
-    wutIrqHandler();
-    // Стираем флаг прерывания EXTI
-    EXTI->PR |= EXTI_PR_PR20;
+  	wutStop();
+  	wutIrqHandler();
   }
   if( RTC->ISR & RTC_ISR_ALRAF ){
     // Alarm A interrupt
@@ -114,17 +100,18 @@ void RTC_IRQHandler(void){
 	dbgTime.mcuEnd = mTick;
 #endif // DEBUG_TIME
 
-	// Проверяем на наличие прерывания EXTI
-	if(EXTI->PR != 0){
-		uint8_t tmp = EXTI->PR;
-		EXTI->PR = tmp;
-	}
   // Стираем PWR_CR_WUF
   PWR->CR |= PWR_CR_CWUF;
   while( (PWR->CSR & PWR_CSR_WUF) != 0)
   {}
 	// Сохраняем настройки портов
 	saveContext();
+	// Проверяем на наличие прерывания EXTI
+	if(EXTI->PR != 0){
+		uint8_t tmp = EXTI->PR;
+		EXTI->PR = tmp;
+		NVIC->ICPR[0] = NVIC->ISPR[0];
+	}
 }
 
 /**
@@ -157,6 +144,12 @@ void EXTI0_1_IRQHandler(void)
 
 	// Сохраняем настройки портов
 	saveContext();
+	// Проверяем на наличие прерывания EXTI
+	if(EXTI->PR != 0){
+		uint8_t tmp = EXTI->PR;
+		EXTI->PR = tmp;
+		NVIC->ICPR[0] = NVIC->ISPR[0];
+	}
 }
 
 // Прерывание по PA3 - DIO3 RSSI
@@ -193,6 +186,12 @@ void EXTI2_3_IRQHandler( void ){
 
 	// Сохраняем настройки портов
 	saveContext();
+	// Проверяем на наличие прерывания EXTI
+	if(EXTI->PR != 0){
+		uint8_t tmp = EXTI->PR;
+		EXTI->PR = tmp;
+		NVIC->ICPR[0] = NVIC->ISPR[0];
+	}
   return;
 }
 

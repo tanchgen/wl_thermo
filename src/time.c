@@ -442,9 +442,12 @@ void wutStop( void ){
     RTC->CR &=~ RTC_CR_WUTE;
     while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
     {}
+    RTC->ISR &= ~RTC_ISR_WUTF;
     // Disable write access
     RTC->WPR = 0xFE;
     RTC->WPR = 0x64;
+    // Стираем флаг прерывания EXTI
+    EXTI->PR |= EXTI_PR_PR20;
 }
 
 /* Установка и запуск wakeup-таймера
@@ -458,6 +461,8 @@ void wutSet( uint32_t us ){
   RTC->CR &= ~RTC_CR_WUTE;
   while((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF)
   {}
+  // Стираем флаг прерывания
+  RTC->ISR &= ~RTC_ISR_WUTF;
   if( us != 0 ){
     // Вычисляем значение таймера: wukt = (us * (RTCCLOCK / 2))/1000000 + 1
     // Максимальная погрешность = + 61мкс (при 32768кГц)

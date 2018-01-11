@@ -24,7 +24,7 @@
 #define TMP75_R12      (uint8_t)0x60      // Маска точности 0.0625 гр.Ц (12 бит)
 #define TMP75_OS       (uint8_t)0x80      // Маска бита START One-Shot
 
-#define TMP75_ACCUR       9
+#define TMP75_ACCUR       9		// Точность измерения (здесь допустимо 9 - 0.5гр.Ц и 10 - 0.25гр.Ц)
 #define TMP75_REG_ACCUR   (((TMP75_ACCUR) - 9) << 5)
 #define TO_MESUR_DELAY   (28 * (1 << (TMP75_ACCUR - 9)))
 

@@ -100,7 +100,7 @@ int main(int argc, char* argv[])
 //  rfmSetMode_s( REG_OPMODE_SLEEP );
 //  SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk;
   saveContext();
-//	__WFI();
+	__WFI();
 	restoreContext();
   // Infinite loop
   while (1){
@@ -161,7 +161,7 @@ static inline void pwrInit( void ){
   // не ждем, пока восстановится VREFIN, проверяем только при запуске АЦП
   PWR->CR |= PWR_CR_ULP | PWR_CR_FWU | PWR_CR_LPSDSR;
   // Interrupt-only Wakeup, DeepSleep enable, SleepOnExit enable
-  SCB->SCR = (SCB->SCR & ~SCB_SCR_SEVONPEND_Msk) | SCB_SCR_SLEEPDEEP_Msk;// | SCB_SCR_SLEEPONEXIT_Msk;
+  SCB->SCR = (SCB->SCR & ~SCB_SCR_SEVONPEND_Msk) | SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk;
 }
 
 static inline void eepromUnlock( void ){

@@ -28,7 +28,7 @@ void mesureStart( void ){
   // Запускаем измерение температуры
   tmp75Start();
   // Устанавливаем время, через которое надо проснутся и запускаем: кратно 28мкс
-  wutSet( 28 * (1 << (TMP75_ACCUR - 9)) );
+  wutSet( 28000 * (1 << (TMP75_ACCUR - 9)) );
   batEnd();
 }
 
@@ -96,8 +96,6 @@ int8_t dataSendTry( void ){
       // Запоминаем время остановки попыток отправки - пробуем не более 1-2 секунды
       sendTryStopTime = getRtcTime() + 1;
       csmaRun();
-      state = STAT_TX_START;
-
     }
     else {
     	state = STAT_READY;
