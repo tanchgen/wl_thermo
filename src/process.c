@@ -47,8 +47,8 @@ void wutIrqHandler( void ){
       break;
     case STAT_RF_CSMA_START:
       // Канал свободен - отправляем сообщение
-      EXTI->PR |= DIO3_PIN;
       EXTI->IMR &= ~(DIO3_PIN);
+      EXTI->PR |= DIO3_PIN;
 
       // Отмечаем останов RFM_RX
     #if DEBUG_TIME
