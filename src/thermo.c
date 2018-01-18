@@ -123,7 +123,7 @@ uint16_t tmp75ToRead( void ){
   if( tmp75Write( &regAddr, 1, 0 ) == 1){
     if( tmp75Read( tmpBuf.u8, 2 ) != 2) {
       flags.thermoErr = SET;
-      tmpBuf.u32 = 0xFF;
+      tmpBuf.u32 = 0xF07F;
     }
     else {
       flags.thermoErr = RESET;
@@ -131,7 +131,7 @@ uint16_t tmp75ToRead( void ){
   }
   else {
     flags.thermoErr = SET;
-    tmpBuf.u32 = 0xFF;
+    tmpBuf.u32 = 0xF07F;
   }
 
   // Отмечаем останов измерения

@@ -148,6 +148,7 @@ void csmaPause( void ){
 static void sensDataSend( void ){
   // ---- Формируем пакет данных -----
 	pkt.payCmd = CMD_SENS_SEND;
+  pkt.paySensType = SENS_TYPE;
   pkt.paySrcNode = rfm.nodeAddr;
   pkt.payMsgNum = msgNum++;
   pkt.payBat = sensData.bat;
