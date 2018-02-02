@@ -33,7 +33,7 @@ void wutIrqHandler( void ){
 
   // По какому поводу был включен WUT? - состояние машины
   switch( state ){
-    case STAT_T_MESUR:
+    case STAT_SENS_MESUR:
       // Пора читать измеренную температуру из датчика
       thermoRead();
       // Не пара ли передавать данные серверу?
@@ -70,41 +70,18 @@ void wutIrqHandler( void ){
 
 int8_t dataSendTry( void ){
   int8_t rc = 0;
-  int32_t tmp;
+  int16_t tmp;
   uint8_t tmrf;
-  uint8_t flag = RESET; // Отправлять или нет?
 
   // ------ Надо ли отправлять ? ------------
-  if( flags.sensCplt ){
-    if( (tmrf = rtc.min % SEND_TOUT) == 0 ){
-      // Пришло ВРЕМЯ -> отправлять
-      flag = SET;
-    }
-    else {
-      tmp = sensData.volume - sensData.volumePrev;
-      tmp = tmp*20/sensData.volumePrev;
-      if( tmp != 0 ){
-        // После последнего измерения значение изменилось более, чем на 5%
-        flag = SET;
-      }
-      else {
-        tmp = sensData.volume - sensData.volumePrev6;
-        tmp = tmp*10/sensData.volumePrev6;
-        if( tmp != 0 ){
-          // После последней передачи значение изменилось более, чем на 10%
-          flag = SET;
-        }
-      }
-    }
-
-    if( flag ){
-      // Передача разрешена
+  if( flags.batCplt && flags.sensCplt ){
+    if( ((tmrf = rtc.min % SEND_TOUT) == 0 ) || // Время передачи наступило
+         (((tmp = sensData.volume - sensData.volumePrev) >= 5) || (tmp <= -5)) || // За 1 мин температура изменилась более, чем 0.5 гр.С
+         (((tmp = sensData.volume - sensData.volumePrev6) >= 10) || (tmp <= -10)) ){ // С предыдущей ОЧЕРЕДНОЙ отправки температура изменилась более, чем 1 гр.С
       if(tmrf == 0){
         sensData.volumePrev6 = sensData.volume;
       }
       // Можно отправлять по радиоканалу
-      // Запоминаем время остановки попыток отправки - пробуем не более 1-2 секунды
-      sendTryStopTime = getRtcTime() + 1;
       csmaRun();
     }
     else {

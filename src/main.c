@@ -47,14 +47,6 @@ int main(int argc, char* argv[])
   (void)argc;
   (void)argv;
 
-  DBGMCU->CR |= DBGMCU_CR_DBG_STOP;
-  // Send a greeting to the trace device (skipped on Release).
-//  trace_puts("Hello ARM World!");
-
-  // At this stage the system clock should have already been configured
-  // at high speed.
-//  trace_printf("System clock: %u Hz\n", SystemCoreClock);
-
   mainInit();
   sysClockInit();
   // Разлочили EEPROM

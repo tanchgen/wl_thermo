@@ -316,7 +316,6 @@ static inline void rfDataInit( void ){
   // Инициализация структуры Rfm
   rfm.mode = MODE_STDBY;
   // Считываем из EEPROM параметры
-  // Считываем из EEPROM параметры
   if( (tmp = eeBackup.rfmNetId) == 0){
     // В еепром ничего не записанно
     rfm.netId = eeBackup.rfmNetId = NET_ID;

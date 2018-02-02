@@ -18,7 +18,7 @@ void batInit(void){
   RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;// | RCC_APB2ENR_SYSCFGEN;
 
   // Конфигурация АЦП
-  ADC1->CFGR2 |= LL_ADC_CLOCK_SYNC_PCLK_DIV1;
+  ADC1->CFGR2 |= (ADC_CFGR2_CKMODE_1 | ADC_CFGR2_CKMODE_0);
   // Включаем программный запуск и AUTOFF
   ADC1->CFGR1 = (ADC1->CFGR1 & ~ADC_CFGR1_EXTEN) | ADC_CFGR1_AUTOFF;
   // Только VREFINT канал
@@ -27,13 +27,6 @@ void batInit(void){
   ADC1->SMPR |= ADC_SMPR_SMP_0 | ADC_SMPR_SMP_1;
 
   ADC->CCR |= ADC_CCR_VREFEN;
-
-#if 0 // Измерения проводим в блокирующем режиме
-  // Прерывание по окончанию преобразования
-  ADC1->IER = ADC_IER_EOSIE;
-  NVIC_EnableIRQ(ADC1_COMP_IRQn);
-  NVIC_SetPriority(ADC1_COMP_IRQn,3);
-#endif
 
   ADC1->CR |= ADC_CR_ADDIS;
 
@@ -48,13 +41,15 @@ void batInit(void){
   else {
     ADC1->CALFACT = eeBackup.adcCal;
   }
-  mDelay(10);
-  // Выключаем внутренний регулятор напряжения
-//  ADC1->CR &= ~ADC_CR_ADVREGEN;
-//  RCC->APB2ENR &= ~RCC_APB2ENR_ADC1EN;
+
+	// Выключаем внутренний регулятор напряжения
+  ADC1->CR &= ~ADC_CR_ADVREGEN;
+  RCC->APB2ENR &= ~RCC_APB2ENR_ADC1EN;
 }
 
 void batStart( void ){
+  sensData.bat = 0;
+
 	RCC->APB2ENR |= RCC_APB2ENR_ADCEN;
   // Опять включаем АЦП после калибровки
   ADC1->CR |= ADC_CR_ADEN;
@@ -66,7 +61,6 @@ void batStart( void ){
     while ((ADC1->ISR & ADC_ISR_ADRDY) == 0)
     {}
   }
-
   ADC1->CR |= ADC_CR_ADSTART;
 }
 

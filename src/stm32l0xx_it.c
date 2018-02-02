@@ -7,18 +7,22 @@
 #include "rfm69.h"
 #include "stm32l0xx_it.h"
 
+uint8_t rssiVol;    //
+
 /* External variables --------------------------------------------------------*/
 
-uint8_t rssi;
-uint8_t txCpltCount = 0;        // Счетчик действительно отправленных сообщений
 extern volatile uint8_t csmaCount;
 
 void extiPdTest( void ){
-  if(EXTI->PR != 0){
-    uint32_t tmp = EXTI->PR;
-    EXTI->PR = tmp;
-    NVIC->ICPR[0] = NVIC->ISPR[0];
-  }
+//  if(EXTI->PR != 0){
+//    uint32_t tmp = EXTI->PR;
+//    EXTI->PR = tmp;
+//    if( tmp != 0x00020000 ){
+//      return;
+//    }
+//    RTC->ISR &= ~RTC_ISR_ALRAF;
+//    NVIC->ICPR[0] = NVIC->ISPR[0];
+//  }
 }
 
 /******************************************************************************/
@@ -42,12 +46,12 @@ void PendSV_Handler(void){
 void SysTick_Handler(void) {
 //  mTick++;
 }
+
 /**
 * RTC global interrupt through EXTI lines 17, 19 and 20.
 */
 void RTC_IRQHandler(void){
 // Восстанавливаем настройки портов
-
   restoreContext();
   // Отмечаем запуск MCU
 #if DEBUG_TIME
@@ -60,15 +64,12 @@ void RTC_IRQHandler(void){
   	wutIrqHandler();
   }
   if( RTC->ISR & RTC_ISR_ALRAF ){
-    // Alarm A interrupt
+      // Alarm A interrupt
     //Clear ALRAF
     RTC->ISR &= ~RTC_ISR_ALRAF;
     uxTime = getRtcTime();
-    // Тест - отправляет каждые 10 секунд
-    if((uxTime % 10) == 0) {
-      if(state == STAT_READY){
-        mesureStart();
-      }
+    if(state == STAT_READY){
+      mesureStart();
     }
     // Стираем флаг прерывания EXTI
     EXTI->PR &= EXTI_PR_PR17;
@@ -108,7 +109,6 @@ void EXTI0_1_IRQHandler(void)
   }
   else if( rfm.mode == MODE_TX ) {
     // Отправили пакет с температурой
-    txCpltCount++;
   	wutStop();
   	txEnd();
   }
@@ -119,7 +119,6 @@ void EXTI0_1_IRQHandler(void)
 
   // Выключаем RFM69
   rfmSetMode_s( REG_OPMODE_SLEEP );
-
 	// Сохраняем настройки портов
 	saveContext();
 	// Проверяем на наличие прерывания EXTI
@@ -130,16 +129,21 @@ void EXTI0_1_IRQHandler(void)
 // Канал кем-то занят
 void EXTI2_3_IRQHandler( void ){
   tUxTime timeNow;
+//#if ! STOP_EN
+//  rtcLog[rtcLogCount].ssr = RTC->SSR;
+//  rtcLog[rtcLogCount++].state = state;
+//  rtcLogCount &= 0x3F;
+//#endif
 
   // Восстанавливаем настройки портов
   restoreContext();
   wutStop();
 
   // Выключаем прерывание от DIO3 (RSSI)
-  EXTI->PR &= DIO3_PIN;
   EXTI->IMR &= ~(DIO3_PIN);
+  EXTI->PR &= DIO3_PIN;
 
-  rssi = rfmRegRead( REG_RSSI_VAL );
+  rssiVol = rfmRegRead( REG_RSSI_VAL );
   rfmSetMode_s( REG_OPMODE_SLEEP );
 
   // Отмечаем останов RFM_RX
@@ -149,7 +153,7 @@ void EXTI2_3_IRQHandler( void ){
 
   // Канал занят - Выжидаем паузу 30мс + x * 20мс
   timeNow = getRtcTime();
-  if( (csmaCount >= CSMA_COUNT_MAX) || (timeNow > sendTryStopTime) ){
+  if( csmaCount >= CSMA_COUNT_MAX ){
     // Количество попыток и время на попытки отправить данные вышло - все бросаем до следующего раза
   	csmaCount = 0;
     txEnd();

@@ -24,7 +24,6 @@
 #define __packed __attribute__((packed))
 #endif
 
-
 enum {
   FALSE,
   TRUE
@@ -39,16 +38,16 @@ enum{
 
 typedef enum {
   STAT_READY,
-  STAT_T_MESUR,
-  STAT_T_READ,
-  STAT_T_CPLT,
+  STAT_SENS_MESUR,
+  STAT_SENS_READ,
+  STAT_SENS_CPLT,
   STAT_RF_CSMA_START,
   STAT_RF_CSMA_PAUSE,
   STAT_TX_START
 } eState;
 
 // Структура сохраняемых в EEPROM параметров
-typedef struct __packed {
+typedef struct __packed  {
   uint8_t adcCal;       // Цалибровочный фактор для АЦП
   uint8_t rfmChannel;   // Номер канала
   uint8_t rfmNodeAddr;  // Адрес Нода

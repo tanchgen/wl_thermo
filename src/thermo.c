@@ -108,7 +108,7 @@ void thermoStart( void ){
   // Выключаем I2C
   I2C1->CR1 &= ~I2C_CR1_PE;
 // Уснуть на время преобразования мс: 27.5 - 9бит, 55 - 10бит, 110 - 11бит, 220 - 12бит
-  state = STAT_T_MESUR;
+  state = STAT_SENS_MESUR;
   // Уснуть на время преобразования, мкс макс: 9бит - 28мс, 10бит - 56мс, 11бит - 112мс, 12бит - 224мс
   wutSet( TO_MESUR_DELAY );
 }
@@ -190,7 +190,7 @@ uint8_t thermoRead( void ){
     sensData.volume = tmp75ToRead();
   }
   flags.sensCplt = SET;
-  state = STAT_T_CPLT;
+  state = STAT_SENS_CPLT;
 
   return flags.sensErr;
 }
