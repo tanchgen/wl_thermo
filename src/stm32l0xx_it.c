@@ -9,7 +9,17 @@
 
 /* External variables --------------------------------------------------------*/
 
-extern uint8_t regBuf[];
+uint8_t rssi;
+uint8_t txCpltCount = 0;        // Счетчик действительно отправленных сообщений
+extern volatile uint8_t csmaCount;
+
+void extiPdTest( void ){
+  if(EXTI->PR != 0){
+    uint32_t tmp = EXTI->PR;
+    EXTI->PR = tmp;
+    NVIC->ICPR[0] = NVIC->ISPR[0];
+  }
+}
 
 /******************************************************************************/
 /*            Cortex-M0+ Processor Interruption and Exception Handlers         */ 
@@ -32,40 +42,6 @@ void PendSV_Handler(void){
 void SysTick_Handler(void) {
 //  mTick++;
 }
-
-#if 0
-void ADC1_COMP_IRQHandler(void){
-  if( (ADC1->ISR & ADC_ISR_EOS) == 0 ){
-    // Неизвестное прерывание - перезапускаем АЦП
-    if ((ADC1->CR & ADC_CR_ADSTART) != 0){
-      ADC1->CR |= ADC_CR_ADSTP;
-    }
-    while ((ADC1->CR & ADC_CR_ADSTP) != 0)
-    {}
-    ADC1->CR |= ADC_CR_ADDIS;
-    while ((ADC1->CR & ADC_CR_ADEN) != 0)
-    {}
-    ADC1->CR |= ADC_CR_ADEN;
-  }
-  else {
-    uint32_t vrefCal = *((uint16_t *)0x1FF80078);
-    uint32_t vref = ADC1->DR;
-  	// Выключаем внутренний регулятор напряжения
-    ADC1->CR |= ADC_CR_ADDIS;
-    ADC1->CR &= ~ADC_CR_ADVREGEN;
-
-    // Пересчет: X (мВ) / 10 - 150 = Y * 0.01В. Например: 3600мВ = 210ед, 2000мВ = 50ед
-    sensData.bat = (uint8_t)(((3000L * vrefCal)/vref)/10 - 150);
-//    deepSleepOn();
-    flags.batCplt = TRUE;
-    // Не пара ли передавать данные серверу?
-//    dataSendTry();
-  }
-  // Стираем
-  ADC1->ISR |= 0xFF; //ADC_ISR_EOS | ADC_ISR_EOC | ADC_ISR_EOSMP;
-}
-#endif
-
 /**
 * RTC global interrupt through EXTI lines 17, 19 and 20.
 */
@@ -88,11 +64,14 @@ void RTC_IRQHandler(void){
     //Clear ALRAF
     RTC->ISR &= ~RTC_ISR_ALRAF;
     uxTime = getRtcTime();
-    if(state == STAT_READY){
-      mesureStart();
+    // Тест - отправляет каждые 10 секунд
+    if((uxTime % 10) == 0) {
+      if(state == STAT_READY){
+        mesureStart();
+      }
     }
     // Стираем флаг прерывания EXTI
-    EXTI->PR |= EXTI_PR_PR17;
+    EXTI->PR &= EXTI_PR_PR17;
   }
 
   // Отмечаем Останов MCU
@@ -107,11 +86,7 @@ void RTC_IRQHandler(void){
 	// Сохраняем настройки портов
 	saveContext();
 	// Проверяем на наличие прерывания EXTI
-	if(EXTI->PR != 0){
-		uint8_t tmp = EXTI->PR;
-		EXTI->PR = tmp;
-		NVIC->ICPR[0] = NVIC->ISPR[0];
-	}
+	extiPdTest();
 }
 
 /**
@@ -122,7 +97,8 @@ void EXTI0_1_IRQHandler(void)
 	// Восстанавливаем настройки портов
   restoreContext();
 
-	EXTI->PR |= DIO0_PIN;
+  // Стираем флаг прерывания EXTI
+  EXTI->PR &= DIO0_PIN;
   if( rfm.mode == MODE_RX ){
     // Если что-то и приняли, то случайно
     // Опустошаем FIFO
@@ -132,24 +108,22 @@ void EXTI0_1_IRQHandler(void)
   }
   else if( rfm.mode == MODE_TX ) {
     // Отправили пакет с температурой
+    txCpltCount++;
   	wutStop();
-  	state = STAT_READY;
+  	txEnd();
   }
-  // Выключаем RFM69
-  rfmSetMode_s( REG_OPMODE_SLEEP );
   // Отмечаем останов RFM_TX
 #if DEBUG_TIME
 	dbgTime.rfmTxEnd = mTick;
 #endif // DEBUG_TIME
 
+  // Выключаем RFM69
+  rfmSetMode_s( REG_OPMODE_SLEEP );
+
 	// Сохраняем настройки портов
 	saveContext();
 	// Проверяем на наличие прерывания EXTI
-	if(EXTI->PR != 0){
-		uint8_t tmp = EXTI->PR;
-		EXTI->PR = tmp;
-		NVIC->ICPR[0] = NVIC->ISPR[0];
-	}
+	extiPdTest();
 }
 
 // Прерывание по PA3 - DIO3 RSSI
@@ -159,12 +133,13 @@ void EXTI2_3_IRQHandler( void ){
 
   // Восстанавливаем настройки портов
   restoreContext();
+  wutStop();
 
   // Выключаем прерывание от DIO3 (RSSI)
-  EXTI->PR |= DIO3_PIN;
+  EXTI->PR &= DIO3_PIN;
   EXTI->IMR &= ~(DIO3_PIN);
 
-  regBuf[REG_RSSI_VAL] = rfmRegRead( REG_RSSI_VAL );
+  rssi = rfmRegRead( REG_RSSI_VAL );
   rfmSetMode_s( REG_OPMODE_SLEEP );
 
   // Отмечаем останов RFM_RX
@@ -174,24 +149,20 @@ void EXTI2_3_IRQHandler( void ){
 
   // Канал занят - Выжидаем паузу 30мс + x * 20мс
   timeNow = getRtcTime();
-  if( timeNow > sendTryStopTime ){
-    // Время на попытки отправить данные вышло - все бросаем до следующего раза
-    wutStop();
-    state = STAT_READY;
+  if( (csmaCount >= CSMA_COUNT_MAX) || (timeNow > sendTryStopTime) ){
+    // Количество попыток и время на попытки отправить данные вышло - все бросаем до следующего раза
+  	csmaCount = 0;
+    txEnd();
   }
   else {
   	// Можно еще попытатся - выждем паузу
-  	csmaPause();
+    csmaPause();
   }
 
 	// Сохраняем настройки портов
 	saveContext();
 	// Проверяем на наличие прерывания EXTI
-	if(EXTI->PR != 0){
-		uint8_t tmp = EXTI->PR;
-		EXTI->PR = tmp;
-		NVIC->ICPR[0] = NVIC->ISPR[0];
-	}
+  extiPdTest();
   return;
 }
 

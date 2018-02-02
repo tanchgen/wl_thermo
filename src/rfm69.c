@@ -14,7 +14,7 @@
 void rfmFreqSet( uint32_t freq );
 
 tRfm  rfm;
-uint8_t regBuf[81];     // Регистры RFM69
+// uint8_t regBuf[81];     // Регистры RFM69
 tPkt pkt;            // Структура принятого пакета
 //extern uint8_t tmpVal;
 
@@ -119,7 +119,6 @@ void rfmFreqSet( uint32_t freq ){
 // Только для режима ListenOff
 void rfmSetMode_s( uint8_t mode ){
 	uint8_t rc;
-  uint8_t nowMode;
 
 	__disable_irq();
 
@@ -153,7 +152,7 @@ void rfmTransmit_s( tPkt * ppkt ){
   uint8_t rc;
 
   EXTI->IMR &= ~DIO0_PIN;
-  EXTI->PR |= DIO0_PIN;
+  EXTI->PR &= DIO0_PIN;
 
   rfmTransmit( ppkt );
 
@@ -312,17 +311,18 @@ static inline void dioInit( void ){
 }
 
 static inline void rfDataInit( void ){
-  uint8_t tmp;
+  uint16_t tmp;
 
   // Инициализация структуры Rfm
   rfm.mode = MODE_STDBY;
   // Считываем из EEPROM параметры
+  // Считываем из EEPROM параметры
   if( (tmp = eeBackup.rfmNetId) == 0){
     // В еепром ничего не записанно
-    rfm.netId = NET_ID;
-    rfm.channel = CHANN_DEF;
-    rfm.nodeAddr = NODE_ADDR;
-    rfm.txPwr = TX_PWR_10;
+    rfm.netId = eeBackup.rfmNetId = NET_ID;
+    rfm.channel = eeBackup.rfmChannel = CHANN_DEF;
+    rfm.nodeAddr = eeBackup.rfmNodeAddr = NODE_ADDR;
+    rfm.txPwr = eeBackup.rfmTxPwr = TX_PWR_10;
   }
   else {
     rfm.netId = tmp;

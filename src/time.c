@@ -18,6 +18,13 @@ volatile tRtc rtc;
 volatile tUxTime uxTime;
 uint8_t secondFlag = RESET;
 
+// Для тестирования - массив интервалов таймера WUT
+//static uint8_t wutCount;
+//struct {
+//  eState wutState;
+//  uint32_t wutVol;
+//} wutTest[64];
+
 static void RTC_SetTime( volatile tRtc * prtc );
 static void RTC_GetTime( volatile tRtc * prtc );
 static void RTC_SetDate( volatile tRtc * prtc );
@@ -62,7 +69,7 @@ void rtcInit(void){
   // Устанавливаем секунды в будильник - разбиваем все ноды на 60 групп
   RTC->ALRMAR = (uint32_t)(BCD2BIN(rfm.nodeAddr % 60));
   // Alarm A every day, every hour, every minute
-  RTC->ALRMAR = RTC_ALRMAR_MSK4 | RTC_ALRMAR_MSK3 | RTC_ALRMAR_MSK2;
+  RTC->ALRMAR |= RTC_ALRMAR_MSK4 | RTC_ALRMAR_MSK3 | RTC_ALRMAR_MSK2 | RTC_ALRMAR_MSK1;
   RTC->CR |= RTC_CR_ALRAIE | RTC_CR_ALRAE;
 
   // --- Configure WakeUp Timer -----
@@ -93,6 +100,7 @@ void rtcInit(void){
 }
 
 void timeInit( void ) {
+  uint32_t tmpDr;
   //Инициализируем RTC
   rtcInit();
 
@@ -107,14 +115,12 @@ void timeInit( void ) {
   rtc.sec = 0;;
   rtc.ss = 0;
 
-
+  tmpDr = RTC->DR;
   RTC_SetDate( &rtc );
   RTC_SetTime( &rtc );
-  // Выставляем будильник для измерения температуры
-  rtc.sec = BCD2BIN(rfm.nodeAddr % 60) + 1;
-  uxTime = xTm2Utime( &rtc );
-  setAlrm( uxTime, ALRM_A );
 
+  while( (tmpDr == RTC->DR) )
+  {}
 }
 
 // Получение системного мремени
@@ -284,6 +290,7 @@ void timersHandler( void ) {
 #endif
 }
 
+#if 0
 void timersProcess( void ) {
 
 #if 0
@@ -304,6 +311,7 @@ void timersProcess( void ) {
     secondFlag = RESET;
   }
 }
+#endif
 
 #if 1
 // Задержка по SysTick без прерывания
@@ -378,9 +386,9 @@ static void RTC_GetDate( volatile tRtc * prtc ){
     return;
   }
   prtc->year = BCD2BIN( RTC->DR >> RTC_POSITION_DR_YU );
-  prtc->month = BCD2BIN( RTC->DR >> RTC_POSITION_DR_MU );
+  prtc->month = BCD2BIN( (RTC->DR >> RTC_POSITION_DR_MU) & 0x1f );
   prtc->date = BCD2BIN( RTC->DR );
-  prtc->wday = ( RTC->DR >> RTC_POSITION_DR_WDU ) >> 0x7;
+  prtc->wday = ( RTC->DR >> RTC_POSITION_DR_WDU ) & 0x7;
 }
 
 static void RTC_SetAlrm( tRtc * prtc, uint8_t alrm ){
@@ -447,7 +455,7 @@ void wutStop( void ){
     RTC->WPR = 0xFE;
     RTC->WPR = 0x64;
     // Стираем флаг прерывания EXTI
-    EXTI->PR |= EXTI_PR_PR20;
+    EXTI->PR &= EXTI_PR_PR20;
 }
 
 /* Установка и запуск wakeup-таймера

@@ -8,6 +8,7 @@
 #include "stm32l0xx_ll_i2c.h"
 
 #include "main.h"
+#include "my_time.h"
 #include "thermo.h"
 
 
@@ -93,7 +94,7 @@ uint8_t tmp75RegRead( uint8_t regAddr ){
   return rc;
 }
 
-void tmp75Start( void ){
+void thermoStart( void ){
   const uint8_t cfg = TMP75_OS | TMP75_REG_ACCUR | TMP75_SD;
 
   // Отмечаем запуск измерения
@@ -108,29 +109,31 @@ void tmp75Start( void ){
   I2C1->CR1 &= ~I2C_CR1_PE;
 // Уснуть на время преобразования мс: 27.5 - 9бит, 55 - 10бит, 110 - 11бит, 220 - 12бит
   state = STAT_T_MESUR;
+  // Уснуть на время преобразования, мкс макс: 9бит - 28мс, 10бит - 56мс, 11бит - 112мс, 12бит - 224мс
+  wutSet( TO_MESUR_DELAY );
 }
 
-uint16_t tmp75ToRead( void ){
+int16_t tmp75ToRead( void ){
   union{
     uint8_t u8[4];
     uint32_t u32;
   } tmpBuf;
-  uint32_t to = 0xFF00;
+  int32_t to = 0xFF00;
 
   uint8_t regAddr = TMP75_REG_TO;
 
   // Отправляем 1 байт без autoend
   if( tmp75Write( &regAddr, 1, 0 ) == 1){
     if( tmp75Read( tmpBuf.u8, 2 ) != 2) {
-      flags.thermoErr = SET;
+      flags.sensErr = SET;
       tmpBuf.u32 = 0xF07F;
     }
     else {
-      flags.thermoErr = RESET;
+      flags.sensErr = RESET;
     }
   }
   else {
-    flags.thermoErr = SET;
+    flags.sensErr = SET;
     tmpBuf.u32 = 0xF07F;
   }
 
@@ -143,9 +146,9 @@ uint16_t tmp75ToRead( void ){
   I2C1->CR1 &= ~I2C_CR1_PE;
 
   // Переворачиваем тетрады
-  to = __REV16( tmpBuf.u32 );
+  to =(int16_t) __REV16( tmpBuf.u32 );
 
-  return ((uint16_t)to >> 4);
+  return ((to * 10) >> 8);
 }
 
 
@@ -183,13 +186,13 @@ static uint32_t tmp75Read( uint8_t *rxBuffer, uint8_t num ) {
 
 
 uint8_t thermoRead( void ){
-  if( flags.thermoErr == 0){
-    sensData.temp = tmp75ToRead();
+  if( flags.sensErr == 0){
+    sensData.volume = tmp75ToRead();
   }
-  flags.thermCplt = SET;
+  flags.sensCplt = SET;
   state = STAT_T_CPLT;
 
-  return flags.thermoErr;
+  return flags.sensErr;
 }
 
 
