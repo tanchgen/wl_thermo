@@ -39,17 +39,17 @@
 #define DIO3_PORT_NUM   0
 #define DIO3_EXTI_IRQn  EXTI2_3_IRQn
 
-#define DIO4_PIN        GPIO_Pin_6
-#define DIO4_PIN_NUM    6
-#define DIO4_PORT       GPIOA
+#define DIO4_PIN        GPIO_Pin_4
+#define DIO4_PIN_NUM    4
+#define DIO4_PORT       GPIOB
 
-#define DIO5_PIN        GPIO_Pin_2
-#define DIO5_PIN_NUM    2
+#define DIO5_PIN        GPIO_Pin_5
+#define DIO5_PIN_NUM    5
 #define DIO5_PORT       GPIOB
 
 // Определения для вывода Reset модуля
-#define RFM_RST_PIN      GPIO_Pin_8
-#define RFM_RST_PIN_NUM  8
+#define RFM_RST_PIN      GPIO_Pin_3
+#define RFM_RST_PIN_NUM  3
 #define RFM_RST_PORT     GPIOB
 
 // Выводы по назначению
