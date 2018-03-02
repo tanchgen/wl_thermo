@@ -206,7 +206,7 @@ void saveContext(void){
 		// Configure GPIO port pins in Analog Input mode
 		// PA0 - DIO0 interrupt
 		GPIOA->MODER = 0xEBFF30FC;
-		GPIOB->MODER = 0xFFFFFFFF;
+		GPIOB->MODER = 0xFFFC0FFF;
 
 		// Disable GPIO clocks
 		RCC->IOPENR &= ~( RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN );

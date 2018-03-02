@@ -92,7 +92,6 @@ void rtcInit(void){
 }
 
 void timeInit( void ) {
-	uint32_t tmpDr;
   //Инициализируем RTC
   rtcInit();
 
@@ -107,7 +106,8 @@ void timeInit( void ) {
   rtc.sec = 0;;
   rtc.ss = 0;
 
-	tmpDr = RTC->DR;
+  while( (RTC->ISR & RTC_ISR_RSF) == 0)
+  {}
   RTC_SetDate( &rtc );
   RTC_SetTime( &rtc );
 //  // Выставляем будильник для измерения температуры
@@ -115,7 +115,7 @@ void timeInit( void ) {
 //  uxTime = xTm2Utime( &rtc );
 //  setAlrm( uxTime, ALRM_A );
 //
-  while( (tmpDr == RTC->DR) )
+  while( RTC->DR == 0x2101 )
   {}
 }
 
