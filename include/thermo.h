@@ -27,7 +27,7 @@
 
 #define TMP75_ACCUR       9		// Точность измерения (здесь допустимо 9 - 0.5гр.Ц и 10 - 0.25гр.Ц)
 #define TMP75_REG_ACCUR   (((TMP75_ACCUR) - 9) << 5)
-#define TO_MESUR_DELAY   (28 * (1 << (TMP75_ACCUR - 9)))
+#define TO_MESUR_DELAY   (28000 * (1 << (TMP75_ACCUR - 9)))
 
 //#define TMP75_START      0x02      // Значение CR - проснутся
 //#define TMP75_STOP      0x03      // Значение CR - уснуть
