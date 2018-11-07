@@ -20,6 +20,8 @@ tUxTime sendTryStopTime;
 static uint8_t msgNum;      // Порядковый номер отправляемого пакета
 
 static void sensDataSend( void );
+static uint32_t rngGet( void );
+
 
 void mesureStart( void ){
   // Запускаем измерение напряжения батареи
@@ -74,22 +76,27 @@ int8_t dataSendTry( void ){
   uint8_t tmrf;
 
   // ------ Надо ли отправлять ? ------------
-  if( flags.batCplt && flags.sensCplt ){
-    if( ((tmrf = rtc.min % SEND_TOUT) == 0 ) || // Время передачи наступило
-         (((tmp = sensData.volume - sensData.volumePrev) >= 5) || (tmp <= -5)) || // За 1 мин температура изменилась более, чем 0.5 гр.С
-         (((tmp = sensData.volume - sensData.volumePrev6) >= 10) || (tmp <= -10)) ){ // С предыдущей ОЧЕРЕДНОЙ отправки температура изменилась более, чем 1 гр.С
-      if(tmrf == 0){
-        sensData.volumePrev6 = sensData.volume;
-      }
-      // Можно отправлять по радиоканалу
-      csmaRun();
-    }
-    else {
-      txEnd();
-    }
-    // Сохраняем нынешнюю температуру, как предыдущую
-    sensData.volumePrev = sensData.volume;
+  if( (tmrf = rtc.min % SEND_TO_TOUT) == 0 ) { // Время передачи наступило
+
+    // Время Beacon-передачи наступило
+    sensData.volumePrev6 = sensData.volume;
+    csmaRun();
   }
+  else if( ((tmp = sensData.volume - sensData.volumePrev) >= 5) || (tmp <= -5) ) {
+    // 1* - За 1 мин температура изменилась более, чем 0.5 гр.С
+    csmaRun();
+  }
+  else if( ((tmp = sensData.volume - sensData.volumePrev6) >= 10) || (tmp <= -10) ) {
+    // 2* -  С предыдущей ОЧЕРЕДНОЙ отправки температура изменилась более, чем 1 гр.С
+    csmaRun();
+    // Чтобы избежать повторных отправок по этому условию
+    sensData.volumePrev6 = sensData.volume;
+  }
+  else {
+    txEnd();
+  }
+  // Сохраняем нынешнюю температуру, как предыдущую
+  sensData.volumePrev = sensData.volume;
 
   return rc;
 }
@@ -116,7 +123,7 @@ void csmaRun( void ){
 // Устанавливааем паузу случайной длительности (30-150 мс) в прослушивании канала на предмет тишины
 void csmaPause( void ){
   uint32_t pause;
-#if 1
+#ifdef STM32L052
   SYSCFG->CFGR3 |= SYSCFG_CFGR3_ENREF_RC48MHz;
   RCC->CRRCR |= RCC_CRRCR_HSI48ON;
   RCC->CCIPR |= RCC_CCIPR_HSI48MSEL;
@@ -139,7 +146,7 @@ void csmaPause( void ){
   RCC->CRRCR &= ~RCC_CRRCR_HSI48ON;
   SYSCFG->CFGR3 &= ~SYSCFG_CFGR3_ENREF_RC48MHz;
 #else
-  pause = 0x7FFFFFFF;
+  pause = rngGet();
 #endif
   // Длительность паузы
   pause = ((pause / (0xFFFFFFFFL/9)  ) + 1) * TX_DURAT * csmaCount;
@@ -173,3 +180,17 @@ void txEnd( void ){
   flags.batCplt = FALSE;
   state = STAT_READY;
 }
+
+#ifndef STM32L052
+static uint32_t rngGet( void ){
+  uint32_t rand0;
+  uint8_t b;
+  uint32_t k;
+
+  rand0 = (getRtcTime() << 16) + rtc.ss;
+  k = 1220703125;              // Множитель (простое число)
+  b = 7;                          // Приращение (простое число)
+  rand0 = ( k * rand0 + b );
+  return rand0;
+}
+#endif
